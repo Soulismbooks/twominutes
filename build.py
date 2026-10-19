@@ -16,6 +16,8 @@ NS = {"a": "http://www.w3.org/2005/Atom", "b": "http://schemas.google.com/blogge
 
 def pretty(p): return p[:-5] if p.endswith(".html") else p
 
+def short(t): return t if len(t) <= 22 else t[:20].rstrip() + "…"
+
 def clean_title(t): return html.unescape(t or "").strip()
 def esc(s): return html.escape(s, quote=True)
 def slug(s):
@@ -33,6 +35,7 @@ def tidy(c):
     return c
 
 def text_of(c, n=160):
+    c = re.sub(r"(?is)<(style|script)\b.*?</\1>", " ", c)
     t = html.unescape(re.sub(r"<[^>]+>", " ", c)); t = re.sub(r"\s+", " ", t).strip()
     return (t[:n].rsplit(" ", 1)[0] + "…") if len(t) > n else t
 
@@ -52,13 +55,12 @@ for e in root.findall("a:entry", NS):
              pub=(e.findtext("a:published", namespaces=NS) or "")[:10],
              upd=(e.findtext("a:updated", namespaces=NS) or "")[:10],
              content=tidy(c), desc=text_of(c), img=first_img(c),
-             labels=[k.get("term") for k in e.findall("a:category", NS) if k.get("term")])
+             labels=[k.get("term") for k in e.findall("a:category", NS)])
     (posts if typ == "POST" else pages).append(d)
 posts.sort(key=lambda p: p["pub"], reverse=True)
 pages.sort(key=lambda p: p["title"])
 
 CSS = """:root{--bg:#fff;--fg:#1d1d1f;--mut:#6b6b73;--card:#f6f6f8;--acc:#0b7a4b;--bd:#e4e4ea}
-@media(prefers-color-scheme:dark){:root{--bg:#121214;--fg:#ececf0;--mut:#9a9aa5;--card:#1c1c20;--acc:#4cc38a;--bd:#2c2c33}}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.75 system-ui,-apple-system,"Segoe UI","Noto Sans Devanagari",Roboto,sans-serif}
 a{color:var(--acc)}header.s{border-bottom:1px solid var(--bd)}.w{max-width:760px;margin:0 auto;padding:0 18px}
 header.s .w{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center;justify-content:space-between;padding-top:14px;padding-bottom:14px}
@@ -77,7 +79,7 @@ def layout(title, desc, path, body, img=None, article=None, noindex=False):
     art = ""
     if article:
         art = f'<meta property="article:published_time" content="{article["pub"]}"><meta property="article:modified_time" content="{article["upd"]}">'
-    nav = "".join(f'<a href="{esc(pretty(p["path"]))}">{esc(p["title"])}</a>' for p in pages if p["path"] != "/p/2-minute-tips.html") + '<a href="/p/2-minute-tips">Contact</a>'
+    nav = "".join(f'<a href="{esc(pretty(p["path"]))}">{esc(short(p["title"]))}</a>' for p in pages if p["path"] != "/p/2-minute-tips.html") + '<a href="/p/2-minute-tips">Contact</a>'
     return f"""<!doctype html><html lang="hi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{esc(full)}</title><meta name="description" content="{esc(desc)}"><link rel="canonical" href="{esc(url)}">
 {'<meta name="robots" content="noindex">' if noindex else ''}
@@ -130,7 +132,7 @@ write("/404.html", layout("पेज नहीं मिला", "Page not found
 atom = ['<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom">',
         f"<title>{esc(SITE)}</title><id>{BASE}/</id><link href=\"{BASE}/\"/><link rel=\"self\" href=\"{BASE}/atom.xml\"/><updated>{posts[0]['upd']}T00:00:00Z</updated>"]
 for p in posts[:25]:
-    atom.append(f'<entry><title>{esc(p["title"])}</title><id>{BASE}{pretty(p["path"])}</id><link href="{BASE}{pretty(p["path"])}"/><published>{p["pub"]}T00:00:00Z</published><updated>{p["upd"]}T00:00:00Z</updated><summary>{esc(p["desc"])}</summary></entry>')
+    atom.append(f'<entry><title>{esc(p["title"])}</title><id>{BASE}{pretty(p["path"])}</id><link href=\"{BASE}{pretty(p["path"])}\"/><published>{p["pub"]}T00:00:00Z</published><updated>{p["upd"]}T00:00:00Z</updated><summary>{esc(p["desc"])}</summary></entry>')
 atom.append("</feed>"); write("/atom.xml", "".join(atom))
 
 urls = [(BASE + "/", posts[0]["upd"])] + [(BASE + quote(pretty(p["path"])), p["upd"]) for p in pages + posts] + [(BASE + f"/label/{slug(l)}/", items[0]["upd"]) for l, items in labels.items()]
