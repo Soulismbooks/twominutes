@@ -21,7 +21,7 @@ def short(t): return t if len(t) <= 22 else t[:20].rstrip() + "…"
 def clean_title(t): return html.unescape(t or "").strip()
 def esc(s): return html.escape(s, quote=True)
 def slug(s):
-    s = re.sub(r"[^\w\u0900-\u097F]+", "-", s.strip().lower()).strip("-")
+    s = re.sub(r"[^\w\u0900-\u097F]+", "-", (s or "").strip().lower()).strip("-")
     return s or "label"
 
 def tidy(c):
@@ -55,7 +55,7 @@ for e in root.findall("a:entry", NS):
              pub=(e.findtext("a:published", namespaces=NS) or "")[:10],
              upd=(e.findtext("a:updated", namespaces=NS) or "")[:10],
              content=tidy(c), desc=text_of(c), img=first_img(c),
-             labels=[k.get("term") for k in e.findall("a:category", NS)])
+             labels=[k.get("term") for k in e.findall("a:category", NS) if k.get("term")])
     (posts if typ == "POST" else pages).append(d)
 posts.sort(key=lambda p: p["pub"], reverse=True)
 pages.sort(key=lambda p: p["title"])
@@ -118,7 +118,8 @@ for p in posts + pages:
 
 labels = {}
 for p in posts:
-    for l in p["labels"]: labels.setdefault(l, []).append(p)
+    for l in p["labels"]:
+        labels.setdefault(l, []).append(p)
 redirects = ["/feeds/posts/default /atom.xml 301", "/feeds/posts/summary /atom.xml 301"]
 for l, items in labels.items():
     s = slug(l)
@@ -132,7 +133,7 @@ write("/404.html", layout("पेज नहीं मिला", "Page not found
 atom = ['<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom">',
         f"<title>{esc(SITE)}</title><id>{BASE}/</id><link href=\"{BASE}/\"/><link rel=\"self\" href=\"{BASE}/atom.xml\"/><updated>{posts[0]['upd']}T00:00:00Z</updated>"]
 for p in posts[:25]:
-    atom.append(f'<entry><title>{esc(p["title"])}</title><id>{BASE}{pretty(p["path"])}</id><link href=\"{BASE}{pretty(p["path"])}\"/><published>{p["pub"]}T00:00:00Z</published><updated>{p["upd"]}T00:00:00Z</updated><summary>{esc(p["desc"])}</summary></entry>')
+    atom.append(f'<entry><title>{esc(p["title"])}</title><id>{BASE}{pretty(p["path"])}</id><link href="{BASE}{pretty(p["path"])}"/><published>{p["pub"]}T00:00:00Z</published><updated>{p["upd"]}T00:00:00Z</updated><summary>{esc(p["desc"])}</summary></entry>')
 atom.append("</feed>"); write("/atom.xml", "".join(atom))
 
 urls = [(BASE + "/", posts[0]["upd"])] + [(BASE + quote(pretty(p["path"])), p["upd"]) for p in pages + posts] + [(BASE + f"/label/{slug(l)}/", items[0]["upd"]) for l, items in labels.items()]
