@@ -1,0 +1,38 @@
+name: Rebuild static website
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "build.py"
+      - "feed.atom"
+      - ".github/workflows/rebuild-static-site.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Regenerate website
+        run: python build.py
+      - name: Commit regenerated site
+        run: |
+          if git diff --quiet -- public; then
+            echo "Generated site is already up to date."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public
+          git commit -m "Rebuild static site from latest Blogger feed"
+          git push
