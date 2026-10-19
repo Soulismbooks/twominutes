@@ -29,10 +29,31 @@ jobs:
         run: |
           if git diff --quiet -- public; then
             echo "Generated site is already up to date."
-            exit 0
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add public
+            git commit -m "Rebuild static site from latest Blogger feed"
+            git push
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public
-          git commit -m "Rebuild static site from latest Blogger feed"
-          git push
+      - name: Verify required deployment secret
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::Missing CLOUDFLARE_API_TOKEN repository secret. Add a Cloudflare API token with permission to edit Workers and then rerun this workflow."
+            exit 1
+          fi
+      - name: Deploy static assets to Cloudflare Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::Missing CLOUDFLARE_ACCOUNT_ID repository secret."
+            exit 1
+          fi
+          npm install --global wrangler
+          CLOUDFLARE_API_TOKEN="$CLOUDFLARE_API_TOKEN" \
+          CLOUDFLARE_ACCOUNT_ID="$CLOUDFLARE_ACCOUNT_ID" \
+            wrangler deploy --name twominutes --assets ./public --compatibility-date 2026-10-19
