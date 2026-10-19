@@ -5,7 +5,7 @@ from pathlib import Path
 from urllib.parse import quote
 import xml.etree.ElementTree as ET
 
-BASE = "https://www.twominutes.in"
+BASE = "https://www.twominutes.in"  # Canonical host: www; keep consistent across links, sitemap and feeds
 SITE = "Two Minutes to Happiness & Wealth"
 TAGLINE = "Quick 2-minute tips for a happy life & personal finance! Learn budgeting, saving, and investing at twominutes.in."
 ADSENSE = "ca-pub-5852664798648088"
@@ -14,7 +14,15 @@ ROOT = Path(__file__).parent
 OUT = ROOT / "public"
 NS = {"a": "http://www.w3.org/2005/Atom", "b": "http://schemas.google.com/blogger/2018"}
 
-def pretty(p): return p[:-5] if p.endswith(".html") else p
+def normalize_blogger_path(p):
+    # Blogger export can occasionally contain a duplicated .html suffix.
+    while p.endswith(".html.html"):
+        p = p[:-5]
+    return p
+
+def pretty(p):
+    p = normalize_blogger_path(p)
+    return p[:-5] if p.endswith(".html") else p
 def short(t): return t if len(t) <= 22 else t[:20].rstrip() + "…"
 def clean_title(t): return html.unescape(t or "").strip()
 def esc(s): return html.escape(s, quote=True)
@@ -43,7 +51,7 @@ for e in root.findall("a:entry", NS):
     fn = e.findtext("b:filename", namespaces=NS)
     if status != "LIVE" or typ not in ("POST", "PAGE") or not fn: continue
     c = e.findtext("a:content", namespaces=NS) or ""
-    d = dict(type=typ, path=fn, title=clean_title(e.findtext("a:title", namespaces=NS)),
+    d = dict(type=typ, path=normalize_blogger_path(fn), title=clean_title(e.findtext("a:title", namespaces=NS)),
              pub=(e.findtext("a:published", namespaces=NS) or "")[:10],
              upd=(e.findtext("a:updated", namespaces=NS) or "")[:10],
              content=tidy(c), desc=text_of(c), img=first_img(c),
@@ -132,7 +140,7 @@ def listing(items, base, heading=None, title=None, desc=TAGLINE, homepage=False)
                 '<a class="tool-card" href="/p/twominutes-happiness-calculator-2"><span class="tool-icon" aria-hidden="true">😊</span><span class="tool-free">FREE</span><h3>Happiness Calculator</h3><p>अपनी खुशी का स्कोर जानें</p><span class="tool-cta">कैलकुलेटर खोलें →</span></a>'
                 '</div></section>'
             )
-            intro = f'<section class="hero"><div class="eyebrow">खुशी और आर्थिक समझ · 2 मिनट में</div><h1>छोटे कदम, बेहतर जीवन और मजबूत आर्थिक भविष्य</h1><p>जीवन को सरल बनाने, पैसे को समझने और बेहतर फैसले लेने के लिए उपयोगी विचार—बिना उलझाव, सिर्फ काम की बात।</p></section>' + tools + '<div class="section-title"><h2>नए लेख और उपयोगी सुझाव</h2><span>{len(items)} लेख</span></div>'
+            intro = f'<section class="hero"><div class="eyebrow">खुशी और आर्थिक समझ · 2 मिनट में</div><h1>छोटे कदम, बेहतर जीवन और मजबूत आर्थिक भविष्य</h1><p>जीवन को सरल बनाने, पैसे को समझने और बेहतर फैसले लेने के लिए उपयोगी विचार—बिना उलझाव, सिर्फ काम की बात।</p></section>' + tools + f'<div class="section-title"><h2>नए लेख और उपयोगी सुझाव</h2><span>{len(items)} लेख</span></div>'
         else:
             intro = (f'<div class="section-title"><h1>{esc(heading)}</h1><span>{len(items)} लेख</span></div>' if heading else '')
         body = intro + '<div class="posts">' + "".join(card(p) for p in chunk) + '</div>' + pager
