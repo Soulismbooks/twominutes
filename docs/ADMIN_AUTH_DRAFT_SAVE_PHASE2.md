@@ -5,8 +5,9 @@ This proposal is deliberately **not production-enabled**. It does not deploy a W
 ## Confirmed environment
 - Site source: `feed.atom`; generator: `build.py`; output: `public/`.
 - Existing workflow regenerates and deploys the public static website to Worker `twominutes` on changes to `build.py` or `feed.atom`.
-- Cloudflare Access currently reports `access.api.error.not_enabled`. Access must be enabled in the Cloudflare dashboard before any Access application can be created.
-- The D1 database listing was queried but the current connector response did not provide a reliable result; verify directly after Access setup rather than assuming a D1 database exists.
+- Cloudflare Access organization exists with auth domain `nameless-band-cb69.cloudflareaccess.com`; a read-only check returned an empty Access applications list. No Admin Access app or policy has been created yet.
+- The dedicated D1 database `twominutes_admin_drafts` exists in APAC with database UUID `b63009bd-eb62-4658-bb23-bd171b11f335`. The `admin_drafts` table and both indexes were read back and verified against `migrations/0001_admin_drafts.sql`; current draft row count is 0.
+- Cloudflare Zero Trust previously had a Critical Impact incident and the Access API intermittently returned HTTP 504. Recheck the live incident and Access API health before creating an Access app.
 - Only intended administrator: the verified identity for `shashank77a@gmail.com`. This email is a deployment configuration value, not a password or secret.
 
 ## Required architecture (no public-site disruption)
@@ -30,7 +31,7 @@ This proposal is deliberately **not production-enabled**. It does not deploy a W
 Use parameterized SQL statements. Validate all inputs server-side. Enforce request size limits, same-origin/CORS restrictions, appropriate method checks, and no-store headers for private responses. Do not mistake a client-supplied email/header for a verified Access identity.
 
 ## Manual prerequisite
-In Cloudflare dashboard, enable Cloudflare Access for the account only after reviewing its onboarding implications. Once enabled, review the account's existing app/policy state before creating anything. The next API pass should be read-only discovery of current D1 databases and Access setup; then prepare exact create payloads for confirmation.
+Before creating an Access application, check that the Zero Trust incident is resolved and that Access API reads are consistently healthy. Re-read the team domain and application/policy list first. The public website Worker and root/www DNS must not be changed.
 
 ## Acceptance tests before deployment
 - Unauthenticated visitor cannot load admin UI/API.
