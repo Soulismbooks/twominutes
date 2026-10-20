@@ -25,6 +25,25 @@ jobs:
         run: node --check admin-api/src/index.js
       - name: Run Admin API security tests
         run: npm --prefix admin-api test
+      - name: Check Admin UI JavaScript syntax
+        run: node --check admin-ui/public/app.js
+      - name: Check Admin UI Worker syntax
+        run: node --input-type=module --check < admin-ui/src/index.js
+      - name: Verify UI uses API endpoints and sandbox preview
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          html = Path("admin-ui/public/index.html").read_text(encoding="utf-8")
+          js = Path("admin-ui/public/app.js").read_text(encoding="utf-8")
+          config = Path("admin-ui/wrangler.jsonc").read_text(encoding="utf-8")
+          assert 'href="/styles.css"' in html and 'src="/app.js"' in html
+          assert '"/api/drafts"' in js
+          assert 'sandbox="allow-scripts"' in js
+          assert "allow-same-origin" not in js
+          assert '"workers_dev": false' in config
+          assert '"routes"' not in config
+          print("Admin UI wiring and route safety checks passed.")
+          PY
       - name: Validate draft migration and constraints
         run: |
           python - <<'PY'
