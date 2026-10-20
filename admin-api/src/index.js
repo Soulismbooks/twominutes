@@ -216,7 +216,7 @@ export default {
     const originOK = originAllowed(request, env);
     const cors = originOK ? {
       "access-control-allow-origin": new URL(env.ADMIN_ORIGIN).origin,
-      "access-control-allow-methods": "GET, POST, PUT, OPTIONS",
+      "access-control-allow-methods": "GET, POST, PUT, PATCH, OPTIONS",
       "access-control-allow-headers": "content-type",
       "vary": "Origin",
     } : {};
@@ -273,8 +273,9 @@ export default {
         }
         return json({ id, status: "draft", created_at: now, updated_at: now }, 201, cors);
       }
-      if (match && request.method === "PATCH" && url.pathname.endsWith("/review")) {
-        const reviewId = url.pathname.match(/^\/api\/drafts\/([0-9a-f-]{36})\/review$/i)?.[1];
+      const reviewMatch = url.pathname.match(/^\/api\/drafts\/([0-9a-f-]{36})\/review$/i);
+      if (reviewMatch && request.method === "PATCH") {
+        const reviewId = reviewMatch[1];
         if (!reviewId) return json({ error: "Draft not found." }, 404, cors);
         const review = await env.DB.prepare(
           "UPDATE admin_drafts SET status = 'ready_for_review', updated_at = ? WHERE id = ? AND status = 'draft'"
