@@ -1,0 +1,105 @@
+name: Validate admin API foundation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "admin-api/**"
+      - "admin-ui/**"
+      - "migrations/**"
+      - ".github/workflows/validate-admin-api.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check Worker JavaScript syntax
+        run: node --check admin-api/src/index.js
+      - name: Run Admin API security tests
+        run: npm --prefix admin-api test
+      - name: Check Admin UI JavaScript syntax
+        run: node --check admin-ui/public/app.js
+      - name: Check Admin UI Worker syntax
+        run: node --input-type=module --check < admin-ui/src/index.js
+      - name: Verify UI uses API endpoints and sandbox preview
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          html = Path("admin-ui/public/index.html").read_text(encoding="utf-8")
+          js = Path("admin-ui/public/app.js").read_text(encoding="utf-8")
+          config = Path("admin-ui/wrangler.jsonc").read_text(encoding="utf-8")
+          api_source = Path("admin-api/src/index.js").read_text(encoding="utf-8")
+          assert 'href="/styles.css"' in html and 'src="/app.js"' in html
+          assert '"/api/drafts"' in js
+          assert 'draft-seo-title' in html and 'draft-category' in html and 'draft-tags' in html
+          assert 'data-insert="h2"' in html and 'id="pick-image"' in html
+          assert '"/api/media"' in js and "ready_for_review" in api_source
+          assert 'sandbox="allow-scripts"' in html
+          assert 'sandbox="allow-same-origin"' not in html
+          assert 'srcdoc = buildPreviewDocument()' in js
+          assert 'img-src data: blob:;' in js
+          assert 'img-src data: blob: https:' not in js
+          assert '"workers_dev": false' in config
+          assert '"routes"' not in config
+          assert js.index("const blockTemplates") < js.rindex("refreshDrafts();")
+          assert "const reader = request.body.getReader()" in api_source
+          print("Admin UI wiring and route safety checks passed.")
+          PY
+      - name: Verify embedded Worker assets match UI source
+        run: |
+          node --input-type=module <<'NODE'
+          import worker from "./admin-ui/src/index.js";
+          import { readFileSync } from "node:fs";
+          const files = [
+            ["/", "admin-ui/public/index.html"],
+            ["/index.html", "admin-ui/public/index.html"],
+            ["/styles.css", "admin-ui/public/styles.css"],
+            ["/app.js", "admin-ui/public/app.js"],
+          ];
+          for (const [route, file] of files) {
+            const response = await worker.fetch(new Request("https://admin.example" + route));
+            const actual = await response.text();
+            const expected = readFileSync(file, "utf8");
+            if (response.status !== 200 || actual !== expected) {
+              throw new Error("Embedded Worker asset mismatch: " + route);
+            }
+          }
+          console.log("Embedded Worker assets match source files.");
+          NODE
+      - name: Validate draft migration and constraints
+        run: |
+          python - <<'PY'
+          import sqlite3
+          from pathlib import Path
+
+          db = sqlite3.connect(":memory:")
+          db.executescript(Path("migrations/0001_admin_drafts.sql").read_text(encoding="utf-8"))
+          db.executescript(Path("migrations/0002_admin_editor_metadata.sql").read_text(encoding="utf-8"))
+          columns = {row[1] for row in db.execute("PRAGMA table_info(admin_drafts)")}
+          required = {"id", "title", "slug", "summary", "body_html", "seo_title", "seo_description", "category", "tags_json", "featured_image_url", "featured_image_alt", "canonical_url", "status", "created_at", "updated_at"}
+          assert required.issubset(columns), f"Missing columns: {required - columns}"
+
+          row = ("1", "Example", "example-slug", "", "<p>Draft only</p>", "draft", "2026-10-20T00:00:00Z", "2026-10-20T00:00:00Z")
+          db.execute("INSERT INTO admin_drafts (id, title, slug, summary, body_html, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", row)
+          try:
+              db.execute("INSERT INTO admin_drafts (id, title, slug, summary, body_html, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", ("2", "Duplicate", "example-slug", "", "", "draft", row[6], row[7]))
+              raise AssertionError("Duplicate slug was incorrectly accepted")
+          except sqlite3.IntegrityError:
+              pass
+
+          try:
+              db.execute("INSERT INTO admin_drafts (id, title, slug, summary, body_html, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", ("3", "Bad status", "bad-status", "", "", "published", row[6], row[7]))
+              raise AssertionError("Unexpected status was incorrectly accepted")
+          except sqlite3.IntegrityError:
+              pass
+          print("Draft schema and constraints validated.")
+          PY
