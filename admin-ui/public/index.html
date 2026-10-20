@@ -61,10 +61,11 @@
               <label class="field"><span>URL Slug <em>*</em></span><input id="draft-slug" maxlength="240" required placeholder="save-money-tips"><small>अंग्रेज़ी अक्षर, संख्या और dash उपयोग करें।</small></label>
               <label class="field"><span>छोटा विवरण</span><input id="draft-summary" maxlength="600" placeholder="लेख का संक्षिप्त परिचय"></label>
               <label class="field"><span>SEO Title</span><input id="draft-seo-title" maxlength="70" placeholder="Search results के लिए title"></label>
-              <label class="field full"><span>SEO Description</span><textarea id="draft-seo-description" rows="2" maxlength="160" placeholder="खोज परिणामों में दिखने वाला सारांश (लगभग 150–160 अक्षर)"></textarea></label>
+              <label class="field full"><span>SEO Description</span><textarea id="draft-seo-description" rows="2" maxlength="160" placeholder="खोज परिणामों में दिखने वाला सारांश (लगभग 150–160 अक्षर)"></textarea><small><span id="seo-description-count">0</span>/160 characters</small></label>
               <label class="field"><span>श्रेणी</span><select id="draft-category"><option value="Happy Life">Happy Life</option><option value="Money Tips">Money Tips</option><option value="Soulism">Soulism</option></select></label>
               <label class="field"><span>Tags (comma से अलग करें)</span><input id="draft-tags" maxlength="400" placeholder="happiness, habits, life"></label>
               <label class="field full"><span>Featured Image</span><input id="draft-featured-image" type="file" accept="image/jpeg,image/png,image/webp,image/gif"><input id="draft-featured-image-data" type="hidden"><input id="draft-featured-alt" maxlength="180" placeholder="इमेज का वर्णन (Alt text)"><small>छवि ब्राउज़र में resize होकर draft में embed होगी; PNG/JPEG/WebP चुनें। बड़ी फ़ाइलें compress होंगी।</small><div id="featured-image-status" class="muted">कोई featured image नहीं चुनी गई।</div></label>
+              <label class="field full"><span>Publishing workflow</span><div class="button-row"><button id="review-button" class="button secondary" type="button">Review के लिए भेजें</button><span id="review-status" class="muted">Draft अभी प्रकाशित नहीं है।</span></div><small>यह केवल review status बदलेगा; सार्वजनिक वेबसाइट पर अपने-आप publish नहीं करेगा।</small></label>
               <div class="field full">
                 <span>ब्लॉक एडिटर</span>
                 <div class="block-toolbar" role="toolbar" aria-label="Content formatting">
