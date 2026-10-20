@@ -355,7 +355,7 @@ export default {
         const result = await env.DB.prepare(
           `SELECT id, title, slug, summary, ${fields}, status, created_at, updated_at FROM admin_drafts ORDER BY updated_at DESC LIMIT 100`
         ).all();
-        return json({ drafts: result.results ?? [], capabilities: { metadata: hasMetadata, imageStorage: "inline-draft-only", publishing: false, analytics: false } }, 200, cors);
+        return json({ drafts: result.results ?? [], capabilities: { metadata: hasMetadata, imageStorage: "inline-draft-only", publishing: false, analytics: analyticsConfigured(env) } }, 200, cors);
       }
       if (url.pathname === "/api/drafts" && request.method === "POST") {
         const body = await readJsonBody(request);
