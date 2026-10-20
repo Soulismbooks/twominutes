@@ -221,3 +221,14 @@ test("duplicate slug gives a clean 409 response without leaking database errors"
   assert.match(body, /slug is already in use/i);
   assert.doesNotMatch(body, /private_table|secret_value|UNIQUE constraint/i);
 });
+
+
+test("missing runtime configuration fails closed at the Worker boundary", async () => {
+  const { default: worker } = await import("../src/index.js");
+  const response = await worker.fetch(
+    new Request("https://api.example.com/api/drafts"),
+    { DB: { prepare() { throw new Error("database must not be touched"); } } }
+  );
+  assert.equal(response.status, 503);
+  assert.match(await response.text(), /not configured/i);
+});
