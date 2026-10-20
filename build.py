@@ -155,7 +155,7 @@ def layout(title, desc, path, body, img=None, article=None, noindex=False):
 <script type="application/ld+json">{schema_json}</script>
 <style>{CSS}</style><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={ADSENSE}" crossorigin="anonymous"></script>
 </head><body><header class="s"><div class="w"><a class="logo" href="/">{esc(SITE)}</a><nav>{nav}</nav></div></header>
-<main class="w">{page_body}</main><footer><div class="w"><span>© {esc(SITE)} · छोटे कदम, बेहतर जीवन।</span><span><a href="/atom.xml">RSS Feed</a> · <a href="/sitemap.xml">Sitemap</a></span></div></footer></body></html>"""
+<main class="w">{page_body}</main><footer><div class="w"><span>© {esc(SITE)} · छोटे कदम, बेहतर जीवन।</span><span><a href="/p/about-us">About</a> · <a href="/p/2-minute-tips">Contact</a> · <a href="/privacy-policy">Privacy Policy</a> · <a href="/disclaimer">Disclaimer</a> · <a href="/atom.xml">RSS Feed</a> · <a href="/sitemap.xml">Sitemap</a></span></div></footer></body></html>"""
 
 def write(path, content):
     p = OUT / path.lstrip("/")
@@ -196,7 +196,27 @@ listing(posts, "/", homepage=True)
 for p in posts + pages:
     tags = "".join(f'<a href="/label/{slug(l)}/">{esc(l)}</a>' for l in p["labels"])
     meta = f'<div class="meta">{p["pub"]}</div>' if p["type"] == "POST" else ""
-    body = f'<article class="post"><h1>{esc(p["title"])}</h1>{meta}{p["content"]}</article>' + (f'<div class="tags">{tags}</div>' if tags else "")
+    body = f'<article class="post"><h1>{esc(p["title"])}</h1>{meta}{p["content"]}</article>'
+    page_path = pretty(p["path"])
+
+    # Add original, practical guidance around the existing tools without changing their
+    # calculation code or the underlying Blogger content.
+    if page_path == "/p/emi-calculator-online":
+        body += """<section class="post"><h2>EMI की गणना कैसे होती है?</h2>
+        <p>सामान्य fixed-rate loan की मासिक EMI का अनुमान इस सूत्र से लगाया जाता है: EMI = P × r × (1+r)^n ÷ ((1+r)^n−1), जहाँ P मूल ऋण, r मासिक ब्याज दर (वार्षिक दर ÷ 12 ÷ 100) और n कुल मासिक किस्तें हैं। यदि ब्याज दर बदलती है, तो वास्तविक EMI और कुल ब्याज भी बदल सकते हैं।</p>
+        <h2>उदाहरण</h2><p>यदि ऋण ₹5,00,000, वार्षिक ब्याज दर 10% और अवधि 5 वर्ष हो, तो EMI लगभग ₹10,624 प्रति माह होगी। यह एक अनुमानित उदाहरण है; बैंक की गणना, शुल्क, बीमा और दरों के कारण वास्तविक राशि अलग हो सकती है।</p>
+        <h2>रिज़ल्ट को कैसे समझें?</h2><p>EMI के साथ कुल भुगतान और कुल ब्याज भी देखें। कम EMI पाने के लिए अवधि बढ़ाने से कुल ब्याज बढ़ सकता है। अतिरिक्त भुगतान करने से पहले बैंक के prepayment नियम और संभावित शुल्क जाँचें। यह टूल जानकारी के लिए है, ऋण लेने की व्यक्तिगत सलाह नहीं।</p></section>"""
+    elif page_path == "/p/sip-calculator-online-monthly-sip":
+        body += """<section class="post"><h2>SIP Calculator कैसे काम करता है?</h2>
+        <p>यह कैलकुलेटर नियमित मासिक निवेश और चुने गए अनुमानित वार्षिक रिटर्न के आधार पर भविष्य की संभावित राशि का अनुमान देता है। मासिक अनुमानित दर को अक्सर वार्षिक दर ÷ 12 से निकाला जाता है; वास्तविक कैलकुलेटर का परिणाम उसके compounding convention और निवेश के समय पर निर्भर कर सकता है।</p>
+        <h2>एक सरल उदाहरण</h2><p>यदि आप 20 साल तक हर महीने ₹5,000 निवेश करते हैं, तो आपकी कुल जमा राशि ₹12,00,000 होगी। 10% वार्षिक अनुमानित रिटर्न पर अंतिम राशि लगभग ₹38 लाख के आसपास हो सकती है, लेकिन वास्तविक बाजार रिटर्न अलग और अस्थिर होंगे। यह उदाहरण गारंटी नहीं है।</p>
+        <h2>ध्यान रखने योग्य बातें</h2><ul><li>Mutual fund का रिटर्न निश्चित नहीं होता और मूलधन में नुकसान संभव है।</li><li>महँगाई, expense ratio, टैक्स और निवेश रोकने/बढ़ाने से वास्तविक परिणाम बदल सकते हैं।</li><li>अलग-अलग return assumptions पर परिणाम की तुलना करें; केवल सबसे ऊँचे अनुमान पर फैसला न लें।</li></ul><p>यह टूल शैक्षिक अनुमान के लिए है, निवेश की व्यक्तिगत सिफारिश नहीं।</p></section>"""
+    elif page_path == "/p/income-tax-calculator-fy-2025-26-ay":
+        body += """<section class="post"><h2>टैक्स कैलकुलेटर इस्तेमाल करने से पहले</h2>
+        <p>आयकर का अनुमान लगाने के लिए सही वित्त वर्ष/आकलन वर्ष, कुल taxable income, deductions, exemptions और लागू tax regime चुनें। कैलकुलेटर का परिणाम तभी उपयोगी होगा जब उसमें शामिल slabs, rebate, cess और अन्य नियम उस वर्ष के लागू नियमों से मेल खाते हों।</p>
+        <h2>रिज़ल्ट की पुष्टि करें</h2><p>यह अनुमान सामान्य जानकारी के लिए है। अंतिम टैक्स आपकी आय के प्रकार, deductions, TDS, capital gains और लागू नियमों पर निर्भर कर सकता है। रिटर्न जमा करने से पहले Income Tax Department के आधिकारिक पोर्टल और लागू वित्त वर्ष के निर्देशों से राशि की पुष्टि करें।</p></section>"""
+    if tags:
+        body += f'<div class="tags">{tags}</div>'
     write(p["path"], layout(p["title"], p["desc"], p["path"], body, p["img"], p if p["type"] == "POST" else None))
 
 labels = {}
@@ -209,6 +229,27 @@ for l, items in labels.items():
     redirects.extend([f"/search/label/{quote(l)} /label/{s}/ 301", f"/search/label/{quote(l)}/ /label/{s}/ 301"])
 
 write("/404.html", layout("पेज नहीं मिला", "Page not found", "/404.html", '<div class="hero"><h1>404 — पेज नहीं मिला</h1><p>यह पेज उपलब्ध नहीं है। होमपेज से अपनी पसंद की जानकारी खोजें।</p><p><a style="color:white;font-weight:800" href="/">होमपेज पर लौटें →</a></p></div>', noindex=True))
+
+# Essential trust pages generated with the site; keep copy transparent and avoid
+# promising that the site provides regulated financial/tax advice.
+privacy_body = """<article class="post"><h1>Privacy Policy</h1>
+<p><strong>Last updated: 20 October 2026</strong></p>
+<p>Two Minutes to Happiness &amp; Wealth (twominutes.in) publishes educational articles and free calculation tools about personal finance and everyday life. This page explains, in general terms, how information may be handled when you visit the website.</p>
+<h2>Information you provide</h2><p>If you contact us through a form, the information you submit may be used to read and respond to your message. Please do not send passwords, bank account details, card numbers, identity documents or other confidential information through a general contact form.</p>
+<h2>Cookies, advertising and analytics</h2><p>This website may use cookies or similar technologies for basic site functions and, if enabled, traffic measurement or advertising. Google and other third-party providers may use cookies to serve or measure ads according to their own policies and settings. Third-party services process information under their own terms and privacy policies.</p>
+<p>Visitors can review Google’s advertising and privacy controls in their Google Account and browser settings. Blocking cookies may affect some website or advertising features.</p>
+<h2>External links</h2><p>Articles may link to third-party websites. We do not control their content or privacy practices; review their policies before sharing information.</p>
+<h2>Changes and contact</h2><p>This policy may be updated when website features change. For a question about this policy, use the Contact page linked in the website footer. We will not ask you to share sensitive financial credentials.</p></article>"""
+write("/privacy-policy", layout("Privacy Policy", "Privacy information for visitors to Two Minutes to Happiness & Wealth.", "/privacy-policy", privacy_body))
+
+disclaimer_body = """<article class="post"><h1>Disclaimer</h1>
+<p><strong>Last updated: 20 October 2026</strong></p>
+<h2>Educational information only</h2><p>Articles and calculators on Two Minutes to Happiness &amp; Wealth are provided for general educational and informational purposes. They are not personalised financial, investment, legal, tax, medical or other professional advice.</p>
+<h2>Calculators and estimates</h2><p>Calculator outputs depend on the values entered, assumptions, formulas and rounding used. Actual bank charges, loan terms, taxes, investment returns and government rules may differ. Market-linked investments can lose value; projected returns are not guaranteed. Verify important results with official sources or a qualified professional before making a decision.</p>
+<h2>Accuracy and updates</h2><p>We aim to publish useful and accurate information, but laws, rates, schemes, deadlines and product terms can change. Check the date of an article and confirm time-sensitive information with the relevant official source. We cannot guarantee that every page reflects the latest update at every moment.</p>
+<h2>External links and advertising</h2><p>Links to external sites are provided for convenience and do not necessarily mean endorsement. Advertising, if shown, does not constitute a recommendation by this website.</p></article>"""
+write("/disclaimer", layout("Disclaimer", "Important limitations for articles and calculators on Two Minutes to Happiness & Wealth.", "/disclaimer", disclaimer_body))
+redirects.extend(["/privacy-policy.html /privacy-policy 301", "/disclaimer.html /disclaimer 301"])
 atom = ['<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom">',
         f"<title>{esc(SITE)}</title><id>{BASE}/</id><link href=\"{BASE}/\"/><link rel=\"self\" href=\"{BASE}/atom.xml\"/><updated>{posts[0]['upd']}T00:00:00Z</updated>"]
 for p in posts[:25]:
