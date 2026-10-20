@@ -42,6 +42,15 @@ jobs:
           sitemap = ET.parse(root / "sitemap.xml").getroot()
           assert sitemap.tag.endswith("urlset"), "Invalid sitemap root"
           assert len(list(sitemap)) >= 2, "Sitemap unexpectedly empty"
+          sitemap_urls = {node.findtext("{http://www.sitemaps.org/schemas/sitemap/0.9}loc") for node in sitemap}
+          assert "https://www.twominutes.in/privacy-policy" in sitemap_urls, "Privacy Policy missing from sitemap"
+          assert "https://www.twominutes.in/disclaimer" in sitemap_urls, "Disclaimer missing from sitemap"
+          assert all(".html.html" not in url for url in sitemap_urls), "Duplicate .html.html URL found in sitemap"
+
+          robots = (root / "robots.txt").read_text(encoding="utf-8")
+          assert "Sitemap: https://www.twominutes.in/sitemap.xml" in robots, "robots.txt sitemap URL mismatch"
+          assert (root / "privacy-policy" / "index.html").is_file(), "Privacy Policy page missing"
+          assert (root / "disclaimer" / "index.html").is_file(), "Disclaimer page missing"
 
           html_files = list(root.rglob("*.html"))
           assert html_files, "No HTML pages generated"
