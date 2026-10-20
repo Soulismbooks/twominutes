@@ -4,6 +4,10 @@
   "main": "src/index.js",
   "compatibility_date": "2026-10-20",
   "workers_dev": false,
+  "vars": {
+    "ANALYTICS_ZONE_TAG": "e194bf4106df6b8ab59cedee29b1582c",
+    "ANALYTICS_HOST": "www.twominutes.in"
+  },
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1,
