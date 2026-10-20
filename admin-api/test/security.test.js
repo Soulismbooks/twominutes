@@ -108,6 +108,11 @@ test("slug validation and duplicate slug constraint are enforced in isolated SQL
   const parsed = parseDraft({ title: "Test", slug: "Example Slug", summary: "", body_html: "" });
   assert.equal(parsed.data.slug, "example-slug");
   assert.ok(parseDraft({ title: "", slug: "x", body_html: "" }).error);
+  const metadata = parseDraft({ title: "SEO test", slug: "seo-test", summary: "s", body_html: "<p>x</p>", seo_title: "Better title", seo_description: "Useful description", category: "Happy Life", tags: ["joy", "habits"], featured_image_url: "https://images.example.com/hero.webp", featured_image_alt: "A sunrise", canonical_url: "https://twominutes.in/happy-life/seo-test.html" });
+  assert.equal(metadata.data.seo_title, "Better title");
+  assert.deepEqual(metadata.data.tags, ["joy", "habits"]);
+  assert.ok(parseDraft({ title: "Bad URL", slug: "bad-url", featured_image_url: "javascript:alert(1)" }).error);
+  assert.ok(parseDraft({ title: "Bad metadata", slug: "bad-meta", tags: Array(31).fill("tag") }).error);
 
   // Mirror the migration in an isolated in-memory SQLite DB, not Cloudflare production D1.
   const { spawnSync } = await import("node:child_process");
