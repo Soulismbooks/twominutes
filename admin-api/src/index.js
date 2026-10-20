@@ -1,7 +1,7 @@
 /**
  * Dedicated twominutes.in Admin API.
- * Keep workers_dev=false and add no route until a dedicated Access app/policy
- * is verified. Draft HTML is stored as data; this Worker never renders it.
+ * Hosted only behind the verified Cloudflare Access hostname; workers_dev stays disabled.
+ * Draft HTML is stored as data; this Worker never renders it.
  */
 const JSON_HEADERS = {
   "content-type": "application/json; charset=utf-8",
