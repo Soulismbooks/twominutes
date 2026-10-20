@@ -251,7 +251,7 @@ privacy_body = """<article class="post"><h1>Privacy Policy</h1>
 <p>Visitors can review Google’s advertising and privacy controls in their Google Account and browser settings. Blocking cookies may affect some website or advertising features.</p>
 <h2>External links</h2><p>Articles may link to third-party websites. We do not control their content or privacy practices; review their policies before sharing information.</p>
 <h2>Changes and contact</h2><p>This policy may be updated when website features change. For a question about this policy, use the Contact page linked in the website footer. We will not ask you to share sensitive financial credentials.</p></article>"""
-write("/privacy-policy", layout("Privacy Policy", "Privacy information for visitors to Two Minutes to Happiness & Wealth.", "/privacy-policy", privacy_body))
+write("/privacy-policy/", layout("Privacy Policy", "Privacy information for visitors to Two Minutes to Happiness & Wealth.", "/privacy-policy", privacy_body))
 
 disclaimer_body = """<article class="post"><h1>Disclaimer</h1>
 <p><strong>Last updated: 20 October 2026</strong></p>
@@ -259,7 +259,7 @@ disclaimer_body = """<article class="post"><h1>Disclaimer</h1>
 <h2>Calculators and estimates</h2><p>Calculator outputs depend on the values entered, assumptions, formulas and rounding used. Actual bank charges, loan terms, taxes, investment returns and government rules may differ. Market-linked investments can lose value; projected returns are not guaranteed. Verify important results with official sources or a qualified professional before making a decision.</p>
 <h2>Accuracy and updates</h2><p>We aim to publish useful and accurate information, but laws, rates, schemes, deadlines and product terms can change. Check the date of an article and confirm time-sensitive information with the relevant official source. We cannot guarantee that every page reflects the latest update at every moment.</p>
 <h2>External links and advertising</h2><p>Links to external sites are provided for convenience and do not necessarily mean endorsement. Advertising, if shown, does not constitute a recommendation by this website.</p></article>"""
-write("/disclaimer", layout("Disclaimer", "Important limitations for articles and calculators on Two Minutes to Happiness & Wealth.", "/disclaimer", disclaimer_body))
+write("/disclaimer/", layout("Disclaimer", "Important limitations for articles and calculators on Two Minutes to Happiness & Wealth.", "/disclaimer", disclaimer_body))
 redirects.extend(["/privacy-policy.html /privacy-policy 301", "/disclaimer.html /disclaimer 301"])
 atom = ['<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom">',
         f"<title>{esc(SITE)}</title><id>{BASE}/</id><link href=\"{BASE}/\"/><link rel=\"self\" href=\"{BASE}/atom.xml\"/><updated>{posts[0]['upd']}T00:00:00Z</updated>"]
