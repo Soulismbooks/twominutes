@@ -216,7 +216,7 @@ export default {
     const originOK = originAllowed(request, env);
     const cors = originOK ? {
       "access-control-allow-origin": new URL(env.ADMIN_ORIGIN).origin,
-      "access-control-allow-methods": "GET, POST, PUT, PATCH, OPTIONS",
+      "access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
       "access-control-allow-headers": "content-type",
       "vary": "Origin",
     } : {};
@@ -225,8 +225,8 @@ export default {
       if (!originOK) return json({ error: "Forbidden origin." }, 403);
       return new Response(null, { status: 204, headers: { ...JSON_HEADERS, ...cors } });
     }
-    if (!["GET", "POST", "PUT", "PATCH"].includes(request.method)) {
-      return json({ error: "Method not allowed." }, 405, { allow: "GET, POST, PUT, PATCH" });
+    if (!["GET", "POST", "PUT", "PATCH", "DELETE"].includes(request.method)) {
+      return json({ error: "Method not allowed." }, 405, { allow: "GET, POST, PUT, PATCH, DELETE" });
     }
     if (request.method !== "GET" && !originOK) return json({ error: "Forbidden origin." }, 403);
     if (!env.DB || typeof env.ADMIN_EMAIL !== "string" ||
@@ -284,6 +284,11 @@ export default {
         return json({ id: reviewId, status: "ready_for_review", message: "Draft marked for review; nothing has been published." }, 200, cors);
       }
       const match = url.pathname.match(/^\/api\/drafts\/([0-9a-f-]{36})$/i);
+      if (match && request.method === "DELETE") {
+        const removed = await env.DB.prepare("DELETE FROM admin_drafts WHERE id = ?").bind(match[1]).run();
+        if (!removed.meta?.changes) return json({ error: "Draft not found." }, 404, cors);
+        return json({ id: match[1], deleted: true }, 200, cors);
+      }
       if (match && request.method === "GET") {
         const draft = await env.DB.prepare(
           "SELECT id, title, slug, summary, body_html, seo_title, seo_description, category, tags, featured_image, featured_image_alt, status, created_at, updated_at FROM admin_drafts WHERE id = ?"
