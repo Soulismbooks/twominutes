@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { webcrypto } from "node:crypto";
 import {
   normalizeTeamDomain, safeSlug, parseDraft, hasValidClaims, verifyAccessJwt, readJsonBody, originAllowed,
+  analyticsConfigured, loadZoneAnalytics,
 } from "../src/index.js";
 
 const DOMAIN = "nameless-band-cb69.cloudflareaccess.com";
@@ -377,4 +378,73 @@ test("PUT draft reports migration mismatch and does not disclose SQL internals",
   assert.equal(response.status, 503);
   assert.match(body, /0002_admin_editor_metadata.sql/);
   assert.doesNotMatch(body, /table admin_drafts has no column/i);
+});
+
+
+test("analytics stays disabled until a secret token and valid site settings exist", async () => {
+  let called = false;
+  const result = await loadZoneAnalytics({ ANALYTICS_ZONE_TAG: "e194bf4106df6b8ab59cedee29b1582c", ANALYTICS_HOST: "www.twominutes.in" }, 7, async () => {
+    called = true;
+    throw new Error("Network must not be called without a token");
+  });
+  assert.equal(analyticsConfigured({ CLOUDFLARE_ANALYTICS_TOKEN: "token-long-enough-to-test", ANALYTICS_ZONE_TAG: "e194bf4106df6b8ab59cedee29b1582c", ANALYTICS_HOST: "www.twominutes.in" }), true);
+  assert.equal(analyticsConfigured({ CLOUDFLARE_ANALYTICS_TOKEN: "", ANALYTICS_ZONE_TAG: "e194bf4106df6b8ab59cedee29b1582c", ANALYTICS_HOST: "www.twominutes.in" }), false);
+  assert.ok(result.error.includes("not configured"));
+  assert.equal(called, false);
+});
+
+test("analytics returns real GraphQL request, visit, bandwidth and path values", async () => {
+  const env = {
+    CLOUDFLARE_ANALYTICS_TOKEN: "test-token-that-is-never-returned",
+    ANALYTICS_ZONE_TAG: "e194bf4106df6b8ab59cedee29b1582c",
+    ANALYTICS_HOST: "www.twominutes.in"
+  };
+  let captured;
+  const responseData = {
+    data: { viewer: { zones: [{
+      aggregate: [{count: 432, sum: {visits: 91, edgeResponseBytes: 102400}}],
+      daily: [
+        {count: 120, sum: {visits: 25, edgeResponseBytes: 25000}, dimensions: {datetimeDay: "2026-10-19"}},
+        {count: 312, sum: {visits: 66, edgeResponseBytes: 77400}, dimensions: {datetimeDay: "2026-10-20"}}
+      ],
+      topPaths: [
+        {count: 77, sum: {visits: 20, edgeResponseBytes: 16000}, dimensions: {clientRequestPath: "/2026/10/example.html"}}
+      ]
+    }]}}
+  };
+  const result = await loadZoneAnalytics(env, 7, async (url, options) => {
+    captured = {url, options, body: JSON.parse(options.body)};
+    return {ok: true, json: async () => responseData};
+  });
+  assert.equal(result.source, "Cloudflare GraphQL HTTP analytics");
+  assert.equal(result.host, "www.twominutes.in");
+  assert.equal(result.metrics.requests, 432);
+  assert.equal(result.metrics.visits, 91);
+  assert.equal(result.metrics.dataTransferBytes, 102400);
+  assert.equal(result.topPaths[0].path, "/2026/10/example.html");
+  assert.equal(result.topPaths[0].requests, 77);
+  assert.equal(captured.url, "https://api.cloudflare.com/client/v4/graphql");
+  assert.equal(captured.options.headers.authorization, "Bearer test-token-that-is-never-returned");
+  assert.equal(captured.body.variables.zoneTag, env.ANALYTICS_ZONE_TAG);
+  assert.equal(captured.body.variables.filter.clientRequestHTTPHost, "www.twominutes.in");
+  assert.equal(captured.body.variables.filter.requestSource, "eyeball");
+  assert.equal(result.period.days, 7);
+  assert.doesNotHaveProperty(result, "token");
+});
+
+test("analytics rejects unsupported ranges and hides provider errors", async () => {
+  const env = {
+    CLOUDFLARE_ANALYTICS_TOKEN: "test-token-that-is-never-returned",
+    ANALYTICS_ZONE_TAG: "e194bf4106df6b8ab59cedee29b1582c",
+    ANALYTICS_HOST: "www.twominutes.in"
+  };
+  const invalidRange = await loadZoneAnalytics(env, 9, async () => {
+    throw new Error("must not execute invalid range");
+  });
+  assert.ok(invalidRange.error.includes("days=1, 7 or 30"));
+  const providerFailure = await loadZoneAnalytics(env, 1, async () => ({
+    ok: true, json: async () => ({ errors: [{message:"private provider detail"}] })
+  }));
+  assert.ok(providerFailure.error.includes("Cloudflare Analytics returned an error"));
+  assert.doesNotMatch(providerFailure.error, /private provider detail|test-token/);
 });
