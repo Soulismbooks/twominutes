@@ -1,7 +1,7 @@
 const API_BASE = ""; // Same protected hostname; /api/* must be routed to the separate Admin API Worker.
 const ADMIN_EMAIL = "shashank77a@gmail.com";
 const $ = (id) => document.getElementById(id);
-const state = { drafts: [], currentId: null, timer: null, saving: false, dirty: false, lastSaved: null };
+const state = { drafts: [], currentId: null, timer: null, saving: false, dirty: false, lastSaved: null, analyticsLoading: false };
 const pageNames = { dashboard: "Dashboard", drafts: "Drafts", editor: "लेख Editor", analytics: "Analytics" };
 
 
@@ -66,6 +66,7 @@ function showPage(page) {
   $("page-title").textContent = pageNames[page] || page;
   hideMessage();
   if (page === "drafts" || page === "dashboard") refreshDrafts();
+  if (page === "analytics") refreshAnalytics();
 }
 document.querySelectorAll(".nav-link").forEach((button) => button.addEventListener("click", () => showPage(button.dataset.page)));
 document.querySelectorAll("[data-page]").forEach((button) => {
@@ -485,6 +486,87 @@ window.addEventListener("beforeunload", (event) => {
     event.returnValue = "";
   }
 });
+
+
+function metricNumber(value) {
+  return Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
+}
+function metricBytes(value) {
+  const n = Number(value || 0);
+  if (!Number.isFinite(n) || n <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.min(Math.floor(Math.log(n) / Math.log(1024)), units.length - 1);
+  return (n / Math.pow(1024, i)).toLocaleString("en-IN", { maximumFractionDigits: 1 }) + " " + units[i];
+}
+function renderAnalyticsRows(id, rows, getTitle, getDetail) {
+  const list = $(id);
+  list.replaceChildren();
+  if (!rows.length) {
+    list.append(emptyState("इस अवधि में कोई डेटा नहीं", "Cloudflare ने इस समयावधि के लिए कोई matching traffic record नहीं दिया।"));
+    return;
+  }
+  rows.forEach((row) => {
+    const item = document.createElement("article");
+    item.className = "analytics-row";
+    const title = document.createElement("strong");
+    title.textContent = getTitle(row);
+    const detail = document.createElement("span");
+    detail.textContent = getDetail(row);
+    item.append(title, detail);
+    list.append(item);
+  });
+}
+async function refreshAnalytics() {
+  if (state.analyticsLoading) return;
+  state.analyticsLoading = true;
+  const button = $("analytics-refresh");
+  const status = $("analytics-status");
+  const error = $("analytics-error");
+  const results = $("analytics-results");
+  const empty = $("analytics-empty");
+  button.disabled = true;
+  button.textContent = "लोड हो रहा है…";
+  status.textContent = "Cloudflare से डेटा माँगा जा रहा है";
+  error.classList.add("hidden");
+  results.classList.add("hidden");
+  empty.classList.remove("hidden");
+  try {
+    const days = $("analytics-days").value;
+    const data = await api("/api/analytics?days=" + encodeURIComponent(days));
+    if (!data || !data.metrics || !Array.isArray(data.topPaths) || !Array.isArray(data.trend)) {
+      throw new Error("Analytics API का response मान्य नहीं है।");
+    }
+    $("analytics-requests").textContent = metricNumber(data.metrics.requests);
+    $("analytics-visits").textContent = metricNumber(data.metrics.visits);
+    $("analytics-bytes").textContent = metricBytes(data.metrics.dataTransferBytes);
+    $("analytics-attribution").textContent = "Source: " + data.source + " · Host: " + data.host + " · " +
+      new Date(data.period.start).toLocaleString("hi-IN") + " से " +
+      new Date(data.period.end).toLocaleString("hi-IN") +
+      ". Requests और visits Cloudflare के zone HTTP metrics हैं; ये unique visitors या page-view counter नहीं हैं।";
+    renderAnalyticsRows("analytics-top-paths", data.topPaths,
+      (row) => row.path,
+      (row) => metricNumber(row.requests) + " requests · " + metricNumber(row.visits) + " visits · " + metricBytes(row.dataTransferBytes));
+    renderAnalyticsRows("analytics-daily", data.trend,
+      (row) => row.date,
+      (row) => metricNumber(row.requests) + " requests · " + metricNumber(row.visits) + " visits");
+    results.classList.remove("hidden");
+    empty.classList.add("hidden");
+    status.textContent = "वास्तविक डेटा · " + days + " दिन";
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Analytics लोड नहीं हो सका।";
+    error.textContent = message;
+    error.classList.remove("hidden");
+    status.textContent = "डेटा उपलब्ध नहीं";
+    empty.querySelector("strong").textContent = "Analytics अभी उपलब्ध नहीं हैं";
+    empty.querySelector("p").textContent = message;
+  } finally {
+    button.disabled = false;
+    button.textContent = "डेटा फिर लोड करें";
+    state.analyticsLoading = false;
+  }
+}
+$("analytics-refresh").addEventListener("click", refreshAnalytics);
+$("analytics-days").addEventListener("change", refreshAnalytics);
 
 // Read from the protected API at startup. There are no demo rows or guessed metrics.
 refreshDrafts();
