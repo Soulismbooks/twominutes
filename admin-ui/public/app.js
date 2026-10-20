@@ -133,7 +133,15 @@ function setForm(draft = {}) {
   $("draft-slug").value = draft.slug || "";
   $("draft-summary").value = draft.summary || "";
   $("draft-body").value = draft.body_html || "";
-  $("body-length").textContent = `${$("draft-body").value.length.toLocaleString()} characters`;
+  $("block-editor").innerHTML = draft.body_html || "<p><br></p>";
+  $("draft-seo-title").value = draft.seo_title || "";
+  $("draft-seo-description").value = draft.seo_description || "";
+  $("draft-category").value = draft.category || "Happy Life";
+  $("draft-tags").value = Array.isArray(draft.tags) ? draft.tags.join(", ") : (draft.tags || "");
+  $("draft-featured-image-data").value = draft.featured_image || "";
+  $("draft-featured-alt").value = draft.featured_image_alt || "";
+  $("featured-image-status").textContent = draft.featured_image ? "Featured image saved in draft." : "कोई featured image नहीं चुनी गई।";
+  $("body-length").textContent = `${$("block-editor").innerText.length.toLocaleString()} characters`;
   $("editor-heading").textContent = draft.id ? "Draft संपादित करें" : "नया लेख";
   $("save-button").textContent = draft.id ? "परिवर्तन सेव करें" : "Draft सेव करें";
   $("preview-panel").classList.add("hidden");
@@ -158,11 +166,18 @@ function formData() {
     slug: $("draft-slug").value,
     summary: $("draft-summary").value,
     body_html: $("draft-body").value,
+    seo_title: $("draft-seo-title").value,
+    seo_description: $("draft-seo-description").value,
+    category: $("draft-category").value,
+    tags: $("draft-tags").value.split(",").map((tag) => tag.trim()).filter(Boolean).slice(0, 20),
+    featured_image: $("draft-featured-image-data").value,
+    featured_image_alt: $("draft-featured-alt").value,
   };
 }
 function markDirty() {
   state.dirty = true;
-  $("body-length").textContent = `${$("draft-body").value.length.toLocaleString()} characters`;
+  $("draft-body").value = $("block-editor").innerHTML;
+  $("body-length").textContent = `${$("block-editor").innerText.length.toLocaleString()} characters`;
   setSaveState("Unsaved changes…", "saving");
   clearTimeout(state.timer);
   // Auto-save only after title and a valid slug are present to prevent empty records.
@@ -170,7 +185,82 @@ function markDirty() {
     state.timer = setTimeout(() => saveDraft({ automatic: true }), 1200);
   }
 }
-["draft-title", "draft-slug", "draft-summary", "draft-body"].forEach((id) => $(id).addEventListener("input", markDirty));
+["draft-title", "draft-slug", "draft-summary", "draft-seo-title", "draft-seo-description", "draft-category", "draft-tags", "draft-featured-image-data", "draft-featured-alt"].forEach((id) => $(id).addEventListener("input", markDirty));
+$("block-editor").addEventListener("input", () => { $("draft-body").value = $("block-editor").innerHTML; markDirty(); });
+document.querySelectorAll("[data-command]").forEach((button) => button.addEventListener("click", () => {
+  $("block-editor").focus();
+  const command = button.dataset.command;
+  const value = button.dataset.value || null;
+  if (command === "formatBlock") document.execCommand(command, false, value);
+  else document.execCommand(command, false, value);
+  $("draft-body").value = $("block-editor").innerHTML;
+  markDirty();
+}));
+function insertHtmlAtCaret(html) {
+  $("block-editor").focus();
+  document.execCommand("insertHTML", false, html);
+  $("draft-body").value = $("block-editor").innerHTML;
+  markDirty();
+}
+async function imageAsDataUrl(file) {
+  if (!file || !/^image\/(jpeg|png|webp)$/.test(file.type)) throw new Error("कृपया JPEG, PNG या WebP इमेज चुनें।");
+  if (file.size > 12 * 1024 * 1024) throw new Error("मूल इमेज 12 MB से छोटी होनी चाहिए।");
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const img = new Image();
+    img.src = objectUrl;
+    await img.decode();
+    const scale = Math.min(1, 1200 / img.width, 1200 / img.height);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(img.width * scale));
+    canvas.height = Math.max(1, Math.round(img.height * scale));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Image processing उपलब्ध नहीं है।");
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    let quality = 0.82;
+    let data = canvas.toDataURL("image/jpeg", quality);
+    while (data.length > 260000 && quality > 0.35) {
+      quality -= 0.1;
+      data = canvas.toDataURL("image/jpeg", quality);
+    }
+    if (data.length > 260000) throw new Error("इमेज compress नहीं हो सकी; छोटी image चुनें।");
+    return data;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+$("insert-image-button").addEventListener("click", () => $("draft-inline-image").click());
+$("draft-inline-image").addEventListener("change", async (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  try {
+    showMessage("इमेज compress हो रही है…", "success");
+    const data = await imageAsDataUrl(file);
+    const alt = escapeHtml(file.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " "));
+    insertHtmlAtCaret(`<figure><img src="${data}" alt="${alt}" loading="lazy"><figcaption>${alt}</figcaption></figure><p><br></p>`);
+    showMessage("इमेज लेख में जोड़ दी गई है; draft सेव करें।", "success");
+  } catch (error) {
+    showMessage(error instanceof Error ? error.message : "Image जोड़ने में समस्या हुई।");
+  } finally {
+    event.target.value = "";
+  }
+});
+$("draft-featured-image").addEventListener("change", async (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  try {
+    const data = await imageAsDataUrl(file);
+    $("draft-featured-image-data").value = data;
+    $("featured-image-status").textContent = `Featured image तैयार · ${Math.round(data.length / 1024)} KB encoded`;
+    if (!$("draft-featured-alt").value.trim()) $("draft-featured-alt").value = file.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ");
+    markDirty();
+    showMessage("Featured image draft में जोड़ दी गई है।", "success");
+  } catch (error) {
+    showMessage(error instanceof Error ? error.message : "Featured image जोड़ नहीं पाए।");
+  } finally {
+    event.target.value = "";
+  }
+});
 
 async function saveDraft({ automatic = false } = {}) {
   if (state.saving) { state.dirty = true; return; }
