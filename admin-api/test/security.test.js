@@ -448,3 +448,71 @@ test("analytics rejects unsupported ranges and hides provider errors", async () 
   assert.ok(providerFailure.error.includes("Cloudflare Analytics returned an error"));
   assert.doesNotMatch(providerFailure.error, /private provider detail|test-token/);
 });
+
+
+test("analytics API requires valid Access identity and returns 503 while secret is absent", async () => {
+  const team = "analytics-disabled-test.cloudflareaccess.com";
+  const signed = await makeJwt({ iss: `https://${team}` });
+  let graphqlCalled = false;
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/cdn-cgi/access/certs")) {
+      return new Response(JSON.stringify({keys:[signed.jwk]}), {status:200, headers:{"content-type":"application/json","cache-control":"max-age=30"}});
+    }
+    graphqlCalled = true;
+    throw new Error("GraphQL must not be called with no token");
+  };
+  const env = {
+    ACCESS_TEAM_DOMAIN:team, ACCESS_AUD:AUD, ADMIN_EMAIL:ADMIN,
+    ADMIN_ORIGIN:"https://admin.example.com",
+    ANALYTICS_ZONE_TAG:"e194bf4106df6b8ab59cedee29b1582c",
+    ANALYTICS_HOST:"www.twominutes.in",
+    DB:{prepare(){throw new Error("Analytics route must not touch D1");}}
+  };
+  const {default:worker}=await import("../src/index.js");
+  const response=await worker.fetch(new Request("https://api.example.com/api/analytics?days=7",{
+    headers:{"Cf-Access-Jwt-Assertion":signed.token}
+  }),env);
+  const body=await response.json();
+  assert.equal(response.status,503);
+  assert.match(body.error,/CLOUDFLARE_ANALYTICS_TOKEN/);
+  assert.equal(graphqlCalled,false);
+});
+
+test("analytics API returns only configured host metrics after Access validation", async () => {
+  const team = "analytics-enabled-test.cloudflareaccess.com";
+  const signed = await makeJwt({ iss: `https://${team}` });
+  let graphqlBody;
+  globalThis.fetch = async (url, options={}) => {
+    if (String(url).includes("/cdn-cgi/access/certs")) {
+      return new Response(JSON.stringify({keys:[signed.jwk]}), {status:200, headers:{"content-type":"application/json","cache-control":"max-age=30"}});
+    }
+    assert.equal(String(url),"https://api.cloudflare.com/client/v4/graphql");
+    assert.equal(options.headers.authorization,"Bearer analytics-token-for-unit-test");
+    graphqlBody=JSON.parse(options.body);
+    return new Response(JSON.stringify({data:{viewer:{zones:[{
+      aggregate:[{count:21,sum:{visits:5,edgeResponseBytes:9900}}],
+      daily:[{count:21,sum:{visits:5,edgeResponseBytes:9900},dimensions:{datetimeDay:"2026-10-20"}}],
+      topPaths:[{count:12,sum:{visits:4,edgeResponseBytes:4000},dimensions:{clientRequestPath:"/happy-life.html"}}]
+    }]}}}), {status:200,headers:{"content-type":"application/json"}});
+  };
+  const env = {
+    ACCESS_TEAM_DOMAIN:team, ACCESS_AUD:AUD, ADMIN_EMAIL:ADMIN,
+    ADMIN_ORIGIN:"https://admin.example.com",
+    CLOUDFLARE_ANALYTICS_TOKEN:"analytics-token-for-unit-test",
+    ANALYTICS_ZONE_TAG:"e194bf4106df6b8ab59cedee29b1582c",
+    ANALYTICS_HOST:"www.twominutes.in",
+    DB:{prepare(){throw new Error("Analytics route must not touch D1");}}
+  };
+  const {default:worker}=await import("../src/index.js");
+  const response=await worker.fetch(new Request("https://api.example.com/api/analytics?days=7",{
+    headers:{"Cf-Access-Jwt-Assertion":signed.token}
+  }),env);
+  const body=await response.json();
+  assert.equal(response.status,200);
+  assert.equal(body.metrics.requests,21);
+  assert.equal(body.metrics.visits,5);
+  assert.equal(body.topPaths[0].path,"/happy-life.html");
+  assert.equal(graphqlBody.variables.filter.clientRequestHTTPHost,"www.twominutes.in");
+  assert.equal(graphqlBody.variables.filter.requestSource,"eyeball");
+  assert.doesNotHaveProperty(body,"token");
+});
