@@ -257,9 +257,6 @@ window.addEventListener("beforeunload", (event) => {
   }
 });
 
-// Read from the protected API at startup. There are no demo rows or guessed metrics.
-refreshDrafts();
-
 const blockTemplates = {
   h2: "<h2>नया शीर्षक</h2>\n",
   p: "<p>यहाँ अपना पैराग्राफ लिखें।</p>\n",
@@ -325,3 +322,8 @@ $("review-button").addEventListener("click", async () => {
     await refreshDrafts();
   } catch (error) { showMessage(error.message || "Review request असफल हुई।"); }
 });
+
+
+// Read from the protected API at startup. There are no demo rows or guessed metrics.
+refreshDrafts();
+
