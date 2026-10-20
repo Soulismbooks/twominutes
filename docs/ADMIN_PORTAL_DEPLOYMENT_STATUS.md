@@ -24,7 +24,7 @@ Last checked: 2026-10-20 (UTC)
 
 - Source branch: `admin-auth-draft-save-foundation`
 - PR: https://github.com/Soulismbooks/twominutes/pull/8
-- Latest verified validation run: https://github.com/Soulismbooks/twominutes/actions/runs/39417938122 (all steps passed).
+- Latest verified validation run for the updated editor branch: https://github.com/Soulismbooks/twominutes/actions/runs/39442241921 (all steps passed).
 - PR is deliberately still Draft and unmerged pending a real browser login and first draft create/edit/reload test.
 - Admin UI source files are `admin-ui/public/index.html`, `admin-ui/public/styles.css`, and `admin-ui/public/app.js`. `admin-ui/src/index.js` contains the generated asset map used for the deployed script; regenerate/synchronize it and run CI after changing UI assets.
 
