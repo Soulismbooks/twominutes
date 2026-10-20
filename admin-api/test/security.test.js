@@ -331,6 +331,7 @@ test("draft list falls back cleanly when metadata migration is not installed", a
   assert.equal(body.capabilities.metadata, false);
   assert.equal(body.capabilities.publishing, false);
   assert.equal(body.drafts[0].category, "Happy Life");
+  assert.ok(queries.some((sql) => sql.includes("'' AS seo_title")));
   assert.ok(queries.some((sql) => /'' AS seo_title/.test(sql)));
 });
 
