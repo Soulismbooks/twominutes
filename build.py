@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Blogger feed.atom -> static site in ./public (old Blogger URLs preserved)."""
-import re, html, shutil, math
+import re, html, shutil, math, json
 from pathlib import Path
 from urllib.parse import quote
 import xml.etree.ElementTree as ET
@@ -94,6 +94,40 @@ def layout(title, desc, path, body, img=None, article=None, noindex=False):
     url = BASE + quote(pretty(path), safe="/%")
     og = f'<meta property="og:image" content="{esc(img)}">' if img else ""
     art = f'<meta property="article:published_time" content="{article["pub"]}"><meta property="article:modified_time" content="{article["upd"]}">' if article else ""
+    if article:
+        schema_data = {
+            "@context": "https://schema.org",
+            "@type": "BlogPosting",
+            "headline": title,
+            "description": desc,
+            "datePublished": article["pub"],
+            "dateModified": article["upd"] or article["pub"],
+            "mainEntityOfPage": {"@type": "WebPage", "@id": url},
+            "author": {"@type": "Person", "name": "Shashank Agnihotri"},
+            "publisher": {"@type": "Organization", "name": SITE, "url": BASE}
+        }
+        if img:
+            schema_data["image"] = [img]
+    elif path == "/":
+        schema_data = {
+            "@context": "https://schema.org",
+            "@type": "WebSite",
+            "name": SITE,
+            "url": BASE,
+            "description": desc,
+            "inLanguage": "hi-IN"
+        }
+    else:
+        schema_data = {
+            "@context": "https://schema.org",
+            "@type": "WebPage",
+            "name": title,
+            "description": desc,
+            "url": url,
+            "isPartOf": {"@type": "WebSite", "name": SITE, "url": BASE}
+        }
+    schema_json = json.dumps(schema_data, ensure_ascii=False).replace("</", "<\\/")
+
     nav = "".join(f'<a href="{esc(pretty(p["path"]))}">{esc(short(p["title"]))}</a>' for p in pages if p["path"] != "/p/2-minute-tips.html") + '<a href="/p/2-minute-tips">Contact</a>'
     category_counts = {}
     for post in posts:
@@ -108,6 +142,7 @@ def layout(title, desc, path, body, img=None, article=None, noindex=False):
 {'<meta name="robots" content="noindex">' if noindex else ''}
 <meta property="og:title" content="{esc(title)}"><meta property="og:description" content="{esc(desc)}"><meta property="og:url" content="{esc(url)}"><meta property="og:type" content="{'article' if article else 'website'}"><meta property="og:site_name" content="{esc(SITE)}">{og}{art}
 <meta name="twitter:card" content="summary_large_image"><link rel="alternate" type="application/atom+xml" title="{esc(SITE)}" href="/atom.xml"><link rel="icon" href="/favicon.ico">
+<script type="application/ld+json">{schema_json}</script>
 <style>{CSS}</style><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={ADSENSE}" crossorigin="anonymous"></script>
 </head><body><header class="s"><div class="w"><a class="logo" href="/">{esc(SITE)}</a><nav>{nav}</nav></div></header>
 <main class="w">{page_body}</main><footer><div class="w"><span>© {esc(SITE)} · छोटे कदम, बेहतर जीवन।</span><span><a href="/atom.xml">RSS Feed</a> · <a href="/sitemap.xml">Sitemap</a></span></div></footer></body></html>"""
