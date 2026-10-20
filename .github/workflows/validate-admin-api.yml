@@ -76,6 +76,13 @@ jobs:
           assert 'renderCapabilities(data.capabilities)' in ui
           assert 'metadata !== false' in ui
           assert 'featured-image-storage-note' in html
+          assert 'url.pathname === "/api/analytics"' in api
+          assert 'function loadZoneAnalytics' in api and 'CLOUDFLARE_ANALYTICS_TOKEN' in api
+          assert 'analytics API requires valid Access identity' in test
+          assert 'refreshAnalytics()' in ui and 'analytics-top-paths' in html
+          config = Path("admin-api/wrangler.jsonc").read_text(encoding="utf-8")
+          assert '"ANALYTICS_ZONE_TAG"' in config and '"ANALYTICS_HOST"' in config
+          assert 'CLOUDFLARE_ANALYTICS_TOKEN' not in config
           print("Schema health, migration fallback, and UI capability gating checks passed.")
           PY
       - name: Validate draft migration and constraints
