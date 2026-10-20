@@ -215,6 +215,15 @@ for p in posts + pages:
         body += """<section class="post"><h2>टैक्स कैलकुलेटर इस्तेमाल करने से पहले</h2>
         <p>आयकर का अनुमान लगाने के लिए सही वित्त वर्ष/आकलन वर्ष, कुल taxable income, deductions, exemptions और लागू tax regime चुनें। कैलकुलेटर का परिणाम तभी उपयोगी होगा जब उसमें शामिल slabs, rebate, cess और अन्य नियम उस वर्ष के लागू नियमों से मेल खाते हों।</p>
         <h2>रिज़ल्ट की पुष्टि करें</h2><p>यह अनुमान सामान्य जानकारी के लिए है। अंतिम टैक्स आपकी आय के प्रकार, deductions, TDS, capital gains और लागू नियमों पर निर्भर कर सकता है। रिटर्न जमा करने से पहले Income Tax Department के आधिकारिक पोर्टल और लागू वित्त वर्ष के निर्देशों से राशि की पुष्टि करें।</p></section>"""
+    # Time-sensitive posts should clearly distinguish publication-time context from current official status.
+    time_sensitive = any(term in p["path"].lower() for term in (
+        "recruitment", "rules-changes", "last-date", "tariff-hike", "price-hike",
+        "pay-commission", "scheme-2026", "war-impact", "sebi-intraday", "fastag",
+        "tesla-india", "job-cuts", "layoffs"
+    ))
+    if p["type"] == "POST" and time_sensitive:
+        body += """<section class="post"><h2>जानकारी की तारीख और आधिकारिक पुष्टि</h2>
+        <p>यह लेख अपने प्रकाशन के समय उपलब्ध संदर्भ के आधार पर लिखा गया है। भर्ती, सरकारी योजना, टैक्स, कीमत, नियम और समाचार से जुड़ी जानकारी बदल सकती है। आवेदन करने, भुगतान करने या कोई निर्णय लेने से पहले संबंधित विभाग, नियामक, कंपनी या आधिकारिक अधिसूचना पर वर्तमान तारीख, पात्रता, समय-सीमा और शर्तों की पुष्टि करें। इस लेख को वर्तमान आधिकारिक घोषणा का विकल्प न मानें।</p></section>"""
     if tags:
         body += f'<div class="tags">{tags}</div>'
     write(p["path"], layout(p["title"], p["desc"], p["path"], body, p["img"], p if p["type"] == "POST" else None))
@@ -255,7 +264,8 @@ atom = ['<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/20
 for p in posts[:25]:
     atom.append(f'<entry><title>{esc(p["title"])}</title><id>{BASE}{pretty(p["path"])}</id><link href="{BASE}{pretty(p["path"])}"/><published>{p["pub"]}T00:00:00Z</published><updated>{p["upd"]}T00:00:00Z</updated><summary>{esc(p["desc"])}</summary></entry>')
 atom.append("</feed>"); write("/atom.xml", "".join(atom))
-urls = [(BASE + "/", posts[0]["upd"])] + [(BASE + quote(pretty(p["path"])), p["upd"]) for p in pages + posts] + [(BASE + f"/label/{slug(l)}/", items[0]["upd"]) for l, items in labels.items()]
+# Include generated trust pages explicitly because they are not Blogger feed entries.
+urls = [(BASE + "/", posts[0]["upd"])] + [(BASE + quote(pretty(p["path"])), p["upd"]) for p in pages + posts] + [(BASE + f"/label/{slug(l)}/", items[0]["upd"]) for l, items in labels.items()] + [(BASE + "/privacy-policy", "2026-10-20"), (BASE + "/disclaimer", "2026-10-20")]
 write("/sitemap.xml", '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + "".join(f"<url><loc>{esc(u)}</loc><lastmod>{d}</lastmod></url>" for u, d in urls) + "</urlset>")
 write("/robots.txt", f"User-agent: *\nAllow: /\n\nSitemap: {BASE}/sitemap.xml\n")
 write("/ads.txt", f"google.com, pub-{ADSENSE.split('-')[-1]}, DIRECT, f08c47fec0942fa0\n")
