@@ -24,8 +24,7 @@ jobs:
       - name: Check Worker JavaScript syntax
         run: node --check admin-api/src/index.js
       - name: Run Admin API security tests
-        working-directory: admin-api
-        run: npm test
+        run: npm --prefix admin-api test
       - name: Validate draft migration and constraints
         run: |
           python - <<'PY'
