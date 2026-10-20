@@ -290,7 +290,7 @@ export default {
         ).bind(match[1]).first();
         return draft ? json({ draft }, 200, cors) : json({ error: "Draft not found." }, 404, cors);
       }
-      if (match && request.method === "PUT")
+      if (match && request.method === "PUT") {
         const body = await readJsonBody(request);
         if (body.error) return json({ error: body.error }, 400, cors);
         const parsed = parseDraft(body.value);
