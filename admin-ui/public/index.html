@@ -60,12 +60,34 @@
               <label class="field full"><span>लेख का शीर्षक <em>*</em></span><input id="draft-title" maxlength="240" required placeholder="जैसे: महँगाई में पैसे कैसे बचाएँ?"></label>
               <label class="field"><span>URL Slug <em>*</em></span><input id="draft-slug" maxlength="240" required placeholder="save-money-tips"><small>अंग्रेज़ी अक्षर, संख्या और dash उपयोग करें।</small></label>
               <label class="field"><span>छोटा विवरण</span><input id="draft-summary" maxlength="600" placeholder="लेख का संक्षिप्त परिचय"></label>
+              <label class="field"><span>SEO Title</span><input id="draft-seo-title" maxlength="240" placeholder="खोज परिणामों के लिए शीर्षक"></label>
+              <label class="field"><span>SEO Description</span><textarea id="draft-seo-description" rows="2" maxlength="320" placeholder="खोज परिणामों में दिखने वाला विवरण"></textarea><small>लगभग 150–160 अक्षर रखने की कोशिश करें।</small></label>
+              <label class="field"><span>Category</span><input id="draft-category" maxlength="100" placeholder="Happy Life या Money Tips"></label>
+              <label class="field"><span>Tags (comma separated)</span><input id="draft-tags" maxlength="1200" placeholder="happiness, habits, wellbeing"></label>
+              <label class="field"><span>Canonical URL (optional)</span><input id="draft-canonical" maxlength="500" type="url" placeholder="https://twominutes.in/..."></label>
+              <label class="field full"><span>Featured Image URL</span><input id="draft-featured-image" maxlength="2000" type="url" placeholder="HTTPS image URL या Upload"></label>
+              <label class="field full"><span>Featured Image Alt Text</span><input id="draft-featured-alt" maxlength="300" placeholder="चित्र में क्या दिख रहा है?"></label>
+              <div class="field full">
+                <span>ब्लॉक एडिटर</span>
+                <div class="block-toolbar" role="toolbar" aria-label="Content blocks">
+                  <button class="button secondary" type="button" data-insert="h2">＋ Heading</button>
+                  <button class="button secondary" type="button" data-insert="p">＋ Paragraph</button>
+                  <button class="button secondary" type="button" data-insert="ul">＋ Bullet List</button>
+                  <button class="button secondary" type="button" data-insert="ol">＋ Numbered List</button>
+                  <button class="button secondary" type="button" data-insert="blockquote">＋ Quote</button>
+                  <button class="button secondary" type="button" data-insert="hr">＋ Divider</button>
+                  <button class="button secondary" id="pick-image" type="button">＋ Image</button>
+                  <input id="image-file" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" hidden>
+                </div>
+                <div class="block-editor-help">किसी ब्लॉक बटन से संरचना जोड़ें। HTML स्रोत भी संपादित कर सकते हैं।</div>
+              </div>
               <label class="field full"><span>लेख की सामग्री (HTML समर्थित)</span><textarea id="draft-body" rows="14" maxlength="500000" placeholder="<h2>मुख्य विचार</h2>&#10;<p>यहाँ लेख लिखें…"></textarea><small>HTML/JavaScript यहाँ data के रूप में सेव होता है, Admin पेज पर execute नहीं किया जाता।</small></label>
+              <div class="field full image-status-wrap"><span>Image Upload</span><div id="image-upload-state" class="upload-help">Gallery से चित्र चुनें। अपलोड के लिए Cloudflare R2 और public media hostname आवश्यक हैं।</div></div>
             </div>
-            <div class="editor-footer"><span class="muted" id="body-length">0 characters</span><div class="button-row"><button id="preview-button" class="button secondary" type="button">Preview</button><button id="save-button" class="button primary" type="submit">Draft सेव करें</button></div></div>
+            <div class="editor-footer"><span class="muted" id="body-length">0 characters</span><div class="button-row"><button id="preview-button" class="button secondary" type="button">Preview</button><button id="review-button" class="button secondary" type="button">Review के लिए भेजें</button><button id="save-button" class="button primary" type="submit">Draft सेव करें</button></div></div>
           </form>
-          <div id="preview-panel" class="preview-panel hidden"><div class="panel-heading"><div><h3>Sandboxed Preview</h3><p>HTML/JS अलग sandbox में चलता है, Admin page के origin में नहीं।</p></div><button id="close-preview" class="button secondary" type="button">बंद करें</button></div><iframe id="preview-frame" title="Sandboxed article preview" sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe></div>
-          <div class="publish-notice"><strong>Publish अभी बंद है</strong><p>Publish feature तब सक्रिय होगा जब GitHub PR-based publishing, validation और explicit approval flow पूरा होगा।</p></div>
+          <div id="preview-panel" class="preview-panel hidden"><div class="panel-heading"><div><h3>Sandboxed Preview</h3><p>लेख का responsive preview अलग sandbox में चलता है।</p></div><div class="button-row"><button class="button secondary" type="button" data-preview-width="mobile">Mobile</button><button class="button secondary" type="button" data-preview-width="desktop">Desktop</button><button id="close-preview" class="button secondary" type="button">बंद करें</button></div></div><iframe id="preview-frame" title="Sandboxed article preview" sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe></div>
+          <div class="publish-notice"><strong>सुरक्षित Publishing Workflow</strong><p>Review के लिए भेजने पर लेख review queue में जाएगा। सार्वजनिक वेबसाइट पर अपने-आप प्रकाशित नहीं होगा; GitHub PR, validation और स्पष्ट approval के बाद ही publish integration सक्रिय होगा।</p></div>
         </div>
       </section>
 
