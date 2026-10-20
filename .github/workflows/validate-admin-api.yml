@@ -42,6 +42,8 @@ jobs:
           assert 'sandbox="allow-scripts"' in html
           assert 'sandbox="allow-same-origin"' not in html
           assert 'srcdoc = buildPreviewDocument()' in js
+          assert 'img-src data: blob:;' in js
+          assert 'img-src data: blob: https:' not in js
           assert '"workers_dev": false' in config
           assert '"routes"' not in config
           print("Admin UI wiring and route safety checks passed.")
