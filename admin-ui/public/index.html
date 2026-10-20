@@ -95,8 +95,28 @@
 
       <section id="page-analytics" class="page">
         <div class="panel">
-          <div class="panel-heading"><div><h2>Analytics</h2><p>यहाँ कोई sample या मनगढ़ंत आंकड़ा नहीं दिखाया जाएगा।</p></div><span class="status-pill">अभी जुड़ा नहीं</span></div>
-          <div class="empty analytics-empty"><span>↗</span><strong>Analytics source configure करना बाकी है</strong><p>Cloudflare Web Analytics या किसी वास्तविक provider से data जोड़ने के बाद visitors, views, top pages और referrers दिखेंगे।</p></div>
+          <div class="panel-heading">
+            <div><h2>Cloudflare Traffic Analytics</h2><p>वास्तविक zone HTTP traffic; कोई demo या अनुमानित आँकड़े नहीं।</p></div>
+            <span class="status-pill" id="analytics-status">Configuration जाँची नहीं गई</span>
+          </div>
+          <div class="analytics-controls">
+            <label class="field"><span>समय अवधि</span><select id="analytics-days"><option value="1">पिछले 24 घंटे</option><option value="7" selected>पिछले 7 दिन</option><option value="30">पिछले 30 दिन</option></select></label>
+            <button id="analytics-refresh" class="button primary" type="button">डेटा लोड करें</button>
+          </div>
+          <div id="analytics-error" class="message error hidden" role="alert"></div>
+          <div id="analytics-results" class="hidden">
+            <div class="stats analytics-stats">
+              <article class="stat"><span>HTTP Requests</span><strong id="analytics-requests">—</strong><small>End-user requests</small></article>
+              <article class="stat"><span>Visits</span><strong id="analytics-visits">—</strong><small>Cloudflare की visit परिभाषा</small></article>
+              <article class="stat"><span>Data Transferred</span><strong id="analytics-bytes">—</strong><small>Response bytes</small></article>
+            </div>
+            <p id="analytics-attribution" class="muted analytics-attribution"></p>
+            <div class="analytics-columns">
+              <section class="panel analytics-subpanel"><div class="panel-heading"><div><h3>सबसे अधिक अनुरोध वाले URLs</h3><p>Path के अनुसार वास्तविक request counts</p></div></div><div id="analytics-top-paths" class="analytics-list"></div></section>
+              <section class="panel analytics-subpanel"><div class="panel-heading"><div><h3>Daily trend</h3><p>दिन के अनुसार requests और visits</p></div></div><div id="analytics-daily" class="analytics-list"></div></section>
+            </div>
+          </div>
+          <div class="empty analytics-empty" id="analytics-empty"><span>↗</span><strong>Analytics अभी उपलब्ध नहीं हैं</strong><p>Analytics Read token और site configuration तैयार होने पर यहाँ वास्तविक traffic दिखेगा।</p></div>
         </div>
       </section>
 
