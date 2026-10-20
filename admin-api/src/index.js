@@ -208,11 +208,172 @@ function originAllowed(request, env) {
   return supplied === env.ADMIN_ORIGIN;
 }
 
+const GITHUB_REPO = "Soulismbooks/twominutes";
+const GITHUB_OWNER = "Soulismbooks";
+const GITHUB_DEFAULT_BRANCH = "main";
+
+function xmlEscape(value) {
+  return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/\x27/g, "&apos;");
+}
+
+function sanitizePublishedHtml(value) {
+  return String(value ?? "")
+    .replace(/<(script|iframe|object|embed|form|input|button|textarea|select|option|base|meta|link)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, "")
+    .replace(/<(script|iframe|object|embed|form|input|button|textarea|select|option|base|meta|link)\b[^>]*\/?>/gi, "")
+    .replace(/\s+on[a-z]+\s*=\s*(?:"[^"]*"|\x27[^\x27]*\x27|[^\s>]+)/gi, "")
+    .replace(/\s+(href|src|xlink:href)\s*=\s*(["\x27])\s*(?:javascript|vbscript|data\s*:\s*text\/html)[\s\S]*?\2/gi, " $1=\"#\"");
+}
+
+function buildAtomEntry(draft, publishedAt = new Date().toISOString()) {
+  const slug = safeSlug(draft.slug);
+  if (!slug) throw new Error("A valid slug is required before publishing.");
+  const title = String(draft.title || "").trim();
+  if (!title) throw new Error("A title is required before publishing.");
+  const summary = String(draft.summary || draft.seo_description || "").trim();
+  const featuredUrl = String(draft.featured_image_url || "").trim();
+  const featuredAlt = String(draft.featured_image_alt || "").trim();
+  const canonicalUrl = String(draft.canonical_url || "").trim();
+  const seoTitle = String(draft.seo_title || "").trim();
+  const seoDescription = String(draft.seo_description || "").trim();
+  const featuredMarkup = featuredUrl && !String(draft.body_html || "").includes(featuredUrl)
+    ? `<figure><img src="${xmlEscape(featuredUrl)}" alt="${xmlEscape(featuredAlt)}" loading="eager"></figure>\n` : "";
+  const bodyHtml = sanitizePublishedHtml(featuredMarkup + String(draft.body_html || ""));
+  const labels = [...new Set([draft.category, ...(Array.isArray(draft.tags) ? draft.tags : [])].map(v => String(v || "").trim()).filter(Boolean))].slice(0, 30);
+  const categories = labels.map(label => `<category term="${xmlEscape(label)}" />`).join("\n");
+  const permalink = `https://www.twominutes.in/${encodeURIComponent(slug)}.html`;
+  const identity = String(draft.id || crypto.randomUUID()).replace(/[^a-zA-Z0-9-]/g, "");
+  return [
+    "  <entry>",
+    `    <id>tag:twominutes.in,2026:admin-post-${xmlEscape(identity)}</id>`,
+    `    <title>${xmlEscape(title)}</title>`,
+    `    <published>${publishedAt}</published>`,
+    `    <updated>${publishedAt}</updated>`,
+    `    <link rel="alternate" type="text/html" href="${xmlEscape(permalink)}" />`,
+    `    <summary type="text">${xmlEscape(summary)}</summary>`,
+    `    <content type="html">${xmlEscape(bodyHtml)}</content>`,
+    "    <blogger:type>POST</blogger:type>",
+    "    <blogger:status>LIVE</blogger:status>",
+    `    <blogger:filename>${xmlEscape(slug + ".html")}</blogger:filename>`,
+    `    <blogger:seo-title>${xmlEscape(seoTitle)}</blogger:seo-title>`,
+    `    <blogger:seo-description>${xmlEscape(seoDescription)}</blogger:seo-description>`,
+    `    <blogger:canonical-url>${xmlEscape(canonicalUrl)}</blogger:canonical-url>`,
+    `    <blogger:featured-image-url>${xmlEscape(featuredUrl)}</blogger:featured-image-url>`,
+    `    <blogger:featured-image-alt>${xmlEscape(featuredAlt)}</blogger:featured-image-alt>`,
+    categories ? "    " + categories : "",
+    "  </entry>"
+  ].filter(Boolean).join("\n");
+}
+
+function appendAtomEntry(feed, entry, slug) {
+  if (typeof feed !== "string" || !feed.includes("xmlns:blogger=") || !/<\/feed\s*>\s*$/i.test(feed)) {
+    throw new Error("The current feed.atom format could not be safely updated.");
+  }
+  const target = `${safeSlug(slug)}.html`;
+  const filenameMatches = feed.matchAll(/<blogger:filename>\s*([\s\S]*?)\s*<\/blogger:filename>/gi);
+  for (const match of filenameMatches) {
+    const filename = match[1].replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").trim();
+    if (filename.toLowerCase() === target.toLowerCase()) {
+      const error = new Error("This post URL already exists in feed.atom.");
+      error.status = 409;
+      throw error;
+    }
+  }
+  const closeIndex = feed.toLowerCase().lastIndexOf("</feed>");
+  if (closeIndex < 0) throw new Error("Could not find feed.atom closing tag.");
+  return feed.slice(0, closeIndex) + "\n" + entry + "\n" + feed.slice(closeIndex);
+}
+
+async function githubRequest(token, path, method = "GET", body) {
+  const response = await fetch(`https://api.github.com${path}`, {
+    method,
+    headers: {
+      authorization: `Bearer ${token}`,
+      accept: "application/vnd.github+json",
+      "content-type": "application/json",
+      "x-github-api-version": "2022-11-28",
+      "user-agent": "twominutes-admin-portal"
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    signal: AbortSignal.timeout(15000)
+  });
+  const text = await response.text();
+  let value = null;
+  try { value = text ? JSON.parse(text) : null; } catch { value = null; }
+  if (!response.ok) {
+    const error = new Error("GitHub API request failed with status " + response.status);
+    error.status = response.status;
+    throw error;
+  }
+  return value;
+}
+
+async function createPublicationPullRequest(draft, env) {
+  const token = typeof env.GITHUB_TOKEN === "string" ? env.GITHUB_TOKEN.trim() : "";
+  if (!token) {
+    const error = new Error("Publishing is not configured yet. Add a repository-scoped GITHUB_TOKEN secret to the Admin API Worker.");
+    error.status = 503;
+    throw error;
+  }
+  const safeId = String(draft.id || "").replace(/[^a-f0-9-]/gi, "");
+  const branch = "admin-publish-" + safeId.replace(/-/g, "").slice(0, 16);
+  const headFilter = encodeURIComponent(`${GITHUB_OWNER}:${branch}`);
+  const existing = await githubRequest(token, `/repos/${GITHUB_REPO}/pulls?state=all&head=${headFilter}&base=${GITHUB_DEFAULT_BRANCH}`);
+  if (Array.isArray(existing) && existing.length) {
+    const item = existing[0];
+    if (item.html_url && item.number) return { pull_request_url: item.html_url, pull_request_number: item.number, status: item.state === "open" ? "ready_for_review" : "pull_request_exists" };
+  }
+  const mainRef = await githubRequest(token, `/repos/${GITHUB_REPO}/git/ref/heads/${GITHUB_DEFAULT_BRANCH}`);
+  const mainSha = mainRef?.object?.sha;
+  if (!mainSha) throw new Error("Could not resolve the repository base revision.");
+  const mainCommit = await githubRequest(token, `/repos/${GITHUB_REPO}/git/commits/${mainSha}`);
+  const treeSha = mainCommit?.tree?.sha;
+  if (!treeSha) throw new Error("Could not resolve the repository tree.");
+  const rawResponse = await fetch(`https://raw.githubusercontent.com/${GITHUB_REPO}/${mainSha}/feed.atom`, { signal: AbortSignal.timeout(20000) });
+  if (!rawResponse.ok) throw new Error("Could not read the current publication feed.");
+  const feed = await rawResponse.text();
+  if (feed.length > 8_000_000) throw new Error("feed.atom is larger than the safe publication limit.");
+  const entry = buildAtomEntry(draft);
+  const newFeed = appendAtomEntry(feed, entry, draft.slug);
+  const refPath = `/repos/${GITHUB_REPO}/git/refs/heads/${branch}`;
+  let refCreated = false;
+  try {
+    await githubRequest(token, `/repos/${GITHUB_REPO}/git/refs`, "POST", { ref: `refs/heads/${branch}`, sha: mainSha });
+    refCreated = true;
+  } catch {
+    // A failed/retried request may have left the draft branch behind. Reuse it only after resetting to the exact main revision.
+    await githubRequest(token, refPath, "PATCH", { sha: mainSha, force: true });
+  }
+  const blob = await githubRequest(token, `/repos/${GITHUB_REPO}/git/blobs`, "POST", { content: newFeed, encoding: "utf-8" });
+  const newTree = await githubRequest(token, `/repos/${GITHUB_REPO}/git/trees`, "POST", {
+    base_tree: treeSha, tree: [{ path: "feed.atom", mode: "100644", type: "blob", sha: blob.sha }]
+  });
+  const newCommit = await githubRequest(token, `/repos/${GITHUB_REPO}/git/commits`, "POST", {
+    message: `Admin Portal: publish draft ${safeSlug(draft.slug)}`, tree: newTree.sha, parents: [mainSha]
+  });
+  await githubRequest(token, refPath, "PATCH", { sha: newCommit.sha, force: false });
+  const prTitle = ("Publish: " + String(draft.title || "New post").replace(/\s+/g, " ")).slice(0, 120);
+  const prBody = [
+    "## Admin Portal publication review",
+    "",
+    "This PR adds one reviewed Admin Portal post to `feed.atom`. The existing build workflow will regenerate the public site only after this PR is reviewed and merged.",
+    "",
+    `- **Title:** ${String(draft.title || "").replace(/\r?\n/g, " ")}`,
+    `- **Slug:** ${safeSlug(draft.slug)}.html`,
+    `- **Category:** ${String(draft.category || "Uncategorized").replace(/\r?\n/g, " ")}`,
+    `- **SEO title:** ${String(draft.seo_title || draft.title || "").replace(/\r?\n/g, " ")}`,
+    "",
+    "Nothing is published by creating this PR. Merge is a separate approval step. The article HTML is filtered to remove script-capable elements and event-handler attributes before it enters the public feed."
+  ].join("\n");
+  const pr = await githubRequest(token, `/repos/${GITHUB_REPO}/pulls`, "POST", { title: prTitle, head: branch, base: GITHUB_DEFAULT_BRANCH, body: prBody, maintainer_can_modify: false });
+  if (!pr?.html_url || !pr?.number) throw new Error("GitHub did not return the created Pull Request.");
+  return { pull_request_url: pr.html_url, pull_request_number: pr.number, status: "ready_for_review" };
+}
+
 function safeError() {
   return json({ error: "The request could not be completed." }, 500);
 }
 
-export { normalizeTeamDomain, safeSlug, parseDraft, hasValidClaims, verifyAccessJwt, readJsonBody, originAllowed };
+export { normalizeTeamDomain, safeSlug, parseDraft, hasValidClaims, verifyAccessJwt, readJsonBody, originAllowed, xmlEscape, sanitizePublishedHtml, buildAtomEntry, appendAtomEntry };
 
 export default {
   async fetch(request, env) {
