@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { webcrypto } from "node:crypto";
 import {
   normalizeTeamDomain, safeSlug, parseDraft, hasValidClaims, verifyAccessJwt, readJsonBody, originAllowed,
-} from "../admin-api/src/index.js";
+} from "../src/index.js";
 
 const DOMAIN = "nameless-band-cb69.cloudflareaccess.com";
 const AUD = "test-access-audience";
@@ -87,7 +87,7 @@ test("exact admin email policy is enforced by route", async () => {
   globalThis.fetch = async () => new Response(JSON.stringify({ keys: [signed.jwk] }), {
     status: 200, headers: { "content-type": "application/json" },
   });
-  const { default: worker } = await import("../admin-api/src/index.js");
+  const { default: worker } = await import("../src/index.js");
   const response = await worker.fetch(new Request("https://api.example.com/api/drafts", {
     headers: { "Cf-Access-Jwt-Assertion": signed.token },
   }), env);
@@ -144,7 +144,7 @@ test("origin check requires exact configured HTTPS origin", () => {
 
 
 test("unauthenticated requests cannot list drafts", async () => {
-  const { default: worker } = await import("../admin-api/src/index.js");
+  const { default: worker } = await import("../src/index.js");
   let touchedDb = false;
   const env = {
     ACCESS_TEAM_DOMAIN: DOMAIN, ACCESS_AUD: AUD, ADMIN_EMAIL: ADMIN,
@@ -187,7 +187,7 @@ test("authorized create stores script-like HTML as data without executing it", a
       },
     },
   };
-  const { default: worker } = await import("../admin-api/src/index.js");
+  const { default: worker } = await import("../src/index.js");
   const payload = { title: "Unsafe-looking sample", slug: "safe-sample", summary: "", body_html: "<script>window.pwned=true</script>" };
   const response = await worker.fetch(new Request("https://api.example.com/api/drafts", {
     method: "POST",
@@ -210,7 +210,7 @@ test("duplicate slug gives a clean 409 response without leaking database errors"
     ADMIN_ORIGIN: "https://admin.example.com",
     DB: { prepare(sql) { return { bind() { return { async run() { throw new Error("UNIQUE constraint failed: private_table.secret_value"); } }; } }; } },
   };
-  const { default: worker } = await import("../admin-api/src/index.js");
+  const { default: worker } = await import("../src/index.js");
   const response = await worker.fetch(new Request("https://api.example.com/api/drafts", {
     method: "POST",
     headers: { Origin: env.ADMIN_ORIGIN, "Cf-Access-Jwt-Assertion": signed.token, "Content-Type": "application/json" },
