@@ -94,18 +94,19 @@ async function api(path, options = {}) {
 function renderCapabilities(capabilities = {}) {
   const metadataReady = capabilities.metadata !== false;
   const imageMode = capabilities.imageStorage || "inline-draft-only";
-  const note = $("global-message");
-  if (!metadataReady) {
-    showMessage("चेतावनी: Admin D1 में SEO/Category/Tags की migration अभी लागू नहीं है। Metadata वाले बदलाव अभी सेव न करें।", "error");
-    $("save-button").disabled = true;
-    $("review-button").disabled = true;
-  } else {
-    $("save-button").disabled = false;
-    $("review-button").disabled = false;
-  }
+  state.metadataReady = metadataReady;
   $("featured-image-storage-note").textContent = imageMode === "r2"
     ? "इमेज सुरक्षित media storage में रखी जाती है।"
     : "R2 enable नहीं है: image अभी draft के अंदर सीमित आकार में सेव होती है; यह स्थायी media library नहीं है।";
+  $("save-button").disabled = !metadataReady;
+  $("review-button").disabled = !metadataReady;
+  if (!metadataReady) {
+    $("metadata-warning").classList.remove("hidden");
+    $("metadata-warning").textContent = "Admin D1 में editor metadata migration लागू नहीं है। अभी SEO/Category/Tags या featured image वाले Draft को सेव न करें; backend सुरक्षित रूप से रोक देगा।";
+  } else {
+    $("metadata-warning").classList.add("hidden");
+    $("metadata-warning").textContent = "";
+  }
 }
 
 function dateLabel(value) {
@@ -194,6 +195,7 @@ async function refreshDrafts() {
     $("identity-status").textContent = "Access verification आवश्यक";
     const message = error instanceof Error ? error.message : "Drafts लोड नहीं हो सके।";
     showMessage(message);
+    renderCapabilities({metadata:false});
     if (!state.drafts.length) {
       $("recent-drafts").replaceChildren(emptyState("Drafts लोड नहीं हुए", "Access और Admin API की configuration जाँचें।"));
       $("all-drafts").replaceChildren(emptyState("Drafts उपलब्ध नहीं", "लॉगिन और backend उपलब्ध होने पर फिर प्रयास करें।"));
@@ -413,6 +415,11 @@ $("draft-featured-image").addEventListener("change", async (event) => {
 });
 
 async function saveDraft({ automatic = false } = {}) {
+  if (state.metadataReady === false) {
+    if (!automatic) showMessage("Admin D1 metadata migration अधूरी है; इस समय Draft save नहीं किया गया।", "error");
+    setSaveState("Metadata migration आवश्यक", "error");
+    return;
+  }
   if (state.saving) { state.dirty = true; return; }
   const data = formData();
   if (!data.title.trim() || !data.slug.trim()) {
