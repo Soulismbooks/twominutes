@@ -11,3 +11,9 @@
 .block-editor ul,.block-editor ol{padding-left:25px}
 .field input[type=file]{background:#fff;font-size:12px}
 @media(max-width:520px){.block-editor{min-height:240px;padding:13px}.block-toolbar .button{padding:7px}}
+
+/* Draft actions */
+.draft-actions{display:flex;gap:7px;align-items:center;flex-shrink:0}
+.button.danger{color:#a52c22;border-color:#f0ceca;background:#fffafa}
+.button.danger:hover{background:#fdebe9}
+@media(max-width:520px){.draft-actions{flex-direction:column;align-items:stretch}.draft-actions .button{width:100%}}
