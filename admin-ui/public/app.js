@@ -4,6 +4,42 @@ const $ = (id) => document.getElementById(id);
 const state = { drafts: [], currentId: null, timer: null, saving: false, dirty: false, lastSaved: null };
 const pageNames = { dashboard: "Dashboard", drafts: "Drafts", editor: "लेख Editor", analytics: "Analytics" };
 
+
+const SAFE_EDITOR_TAGS = new Set(["H2","H3","P","UL","OL","LI","STRONG","B","EM","I","BLOCKQUOTE","FIGURE","IMG","FIGCAPTION","A","BR","HR","CODE","PRE","SPAN"]);
+function sanitizeRichHtml(input) {
+  const parsed = new DOMParser().parseFromString(String(input || ""), "text/html");
+  function clean(node) {
+    if (node.nodeType === Node.TEXT_NODE) return document.createTextNode(node.textContent || "");
+    if (node.nodeType !== Node.ELEMENT_NODE || !SAFE_EDITOR_TAGS.has(node.tagName)) {
+      const fragment = document.createDocumentFragment();
+      node.childNodes?.forEach((child) => fragment.append(clean(child)));
+      return fragment;
+    }
+    const safe = document.createElement(node.tagName.toLowerCase());
+    if (node.tagName === "IMG") {
+      const src = node.getAttribute("src") || "";
+      if (!/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(src)) return document.createDocumentFragment();
+      safe.setAttribute("src", src);
+      safe.setAttribute("alt", (node.getAttribute("alt") || "").slice(0, 180));
+      safe.setAttribute("loading", "lazy");
+    } else if (node.tagName === "A") {
+      const href = node.getAttribute("href") || "";
+      if (/^https:\/\//i.test(href)) {
+        safe.setAttribute("href", href);
+        safe.setAttribute("rel", "noopener noreferrer");
+        safe.setAttribute("target", "_blank");
+      }
+    }
+    node.childNodes.forEach((child) => safe.append(clean(child)));
+    return safe;
+  }
+  const out = document.createDocumentFragment();
+  parsed.body.childNodes.forEach((node) => out.append(clean(node)));
+  const container = document.createElement("div");
+  container.append(out);
+  return container.innerHTML;
+}
+
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -78,13 +114,34 @@ function renderDraftRow(draft) {
   const badge = document.createElement("span");
   badge.className = "draft-status";
   badge.textContent = draft.status === "ready_for_review" ? "Review के लिए" : "Draft";
+  const actions = document.createElement("div");
+  actions.className = "draft-actions";
   const edit = document.createElement("button");
   edit.className = "button secondary";
   edit.type = "button";
   edit.textContent = "Edit";
   edit.addEventListener("click", () => editDraft(draft.id));
-  article.append(main, badge, edit);
+  const remove = document.createElement("button");
+  remove.className = "button danger";
+  remove.type = "button";
+  remove.textContent = "हटाएँ";
+  remove.setAttribute("aria-label", "Draft हटाएँ: " + (draft.title || draft.slug));
+  remove.addEventListener("click", () => deleteDraft(draft));
+  actions.append(edit, remove);
+  article.append(main, badge, actions);
   return article;
+}
+async function deleteDraft(draft) {
+  if (!window.confirm("क्या “" + (draft.title || draft.slug) + "” Draft स्थायी रूप से हटाना है?")) return;
+  try {
+    await api("/api/drafts/" + encodeURIComponent(draft.id), { method: "DELETE" });
+    state.drafts = state.drafts.filter((item) => item.id !== draft.id);
+    if (state.currentId === draft.id) newDraft();
+    renderDrafts();
+    showMessage("Draft हटा दिया गया।", "success");
+  } catch (error) {
+    showMessage(error instanceof Error ? error.message : "Draft हटाया नहीं जा सका।");
+  }
 }
 function emptyState(title, description) {
   const node = document.createElement("div");
@@ -133,7 +190,7 @@ function setForm(draft = {}) {
   $("draft-slug").value = draft.slug || "";
   $("draft-summary").value = draft.summary || "";
   $("draft-body").value = draft.body_html || "";
-  $("block-editor").innerHTML = draft.body_html || "<p><br></p>";
+  $("block-editor").innerHTML = sanitizeRichHtml(draft.body_html || "<p><br></p>");
   $("draft-seo-title").value = draft.seo_title || "";
   $("draft-seo-description").value = draft.seo_description || "";
   $("draft-category").value = draft.category || "Happy Life";
@@ -187,7 +244,12 @@ function markDirty() {
   }
 }
 ["draft-title", "draft-slug", "draft-summary", "draft-seo-title", "draft-seo-description", "draft-category", "draft-tags", "draft-featured-image-data", "draft-featured-alt"].forEach((id) => $(id).addEventListener("input", markDirty));
-$("block-editor").addEventListener("input", () => { $("draft-body").value = $("block-editor").innerHTML; markDirty(); });
+$("block-editor").addEventListener("input", () => {
+  const safe = sanitizeRichHtml($("block-editor").innerHTML);
+  if ($("block-editor").innerHTML !== safe) $("block-editor").innerHTML = safe;
+  $("draft-body").value = safe;
+  markDirty();
+});
 document.querySelectorAll("[data-command]").forEach((button) => button.addEventListener("click", () => {
   $("block-editor").focus();
   const command = button.dataset.command;
