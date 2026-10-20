@@ -246,13 +246,36 @@ export default {
 
     try {
       if (url.pathname === "/api/health" && request.method === "GET") {
-        return json({ ok: true, service: "twominutes-admin-api" }, 200, cors);
+        const schema = await env.DB.prepare("PRAGMA table_info(admin_drafts)").all();
+        const columns = new Set((schema.results ?? []).map((column) => column.name));
+        const required = ["id", "title", "slug", "summary", "body_html", "status", "created_at", "updated_at"];
+        const metadata = ["seo_title", "seo_description", "category", "tags", "featured_image", "featured_image_alt"];
+        return json({
+          ok: required.every((column) => columns.has(column)),
+          service: "twominutes-admin-api",
+          schema: {
+            core: required.every((column) => columns.has(column)),
+            metadata: metadata.every((column) => columns.has(column)),
+            missingCoreColumns: required.filter((column) => !columns.has(column)),
+            missingMetadataColumns: metadata.filter((column) => !columns.has(column))
+          },
+          capabilities: { imageStorage: "inline-draft-only", publishing: false, analytics: false }
+        }, 200, cors);
       }
       if (url.pathname === "/api/drafts" && request.method === "GET") {
+        // Schema health is checked before using metadata columns. This prevents a
+        // missing/unapplied D1 migration from breaking the whole Draft list.
+        const columnsResult = await env.DB.prepare("PRAGMA table_info(admin_drafts)").all();
+        const columns = new Set((columnsResult.results ?? []).map((column) => column.name));
+        const hasMetadata = ["seo_title", "seo_description", "category", "tags", "featured_image", "featured_image_alt"]
+          .every((column) => columns.has(column));
+        const fields = hasMetadata
+          ? "seo_title, seo_description, category, tags, featured_image_alt"
+          : "'' AS seo_title, '' AS seo_description, 'Happy Life' AS category, '[]' AS tags, '' AS featured_image_alt";
         const result = await env.DB.prepare(
-          "SELECT id, title, slug, summary, seo_title, seo_description, category, tags, featured_image_alt, status, created_at, updated_at FROM admin_drafts ORDER BY updated_at DESC LIMIT 100"
+          `SELECT id, title, slug, summary, ${fields}, status, created_at, updated_at FROM admin_drafts ORDER BY updated_at DESC LIMIT 100`
         ).all();
-        return json({ drafts: result.results ?? [] }, 200, cors);
+        return json({ drafts: result.results ?? [], capabilities: { metadata: hasMetadata, imageStorage: "inline-draft-only", publishing: false, analytics: false } }, 200, cors);
       }
       if (url.pathname === "/api/drafts" && request.method === "POST") {
         const body = await readJsonBody(request);
