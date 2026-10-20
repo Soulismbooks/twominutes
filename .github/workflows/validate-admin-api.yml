@@ -56,6 +56,22 @@ jobs:
           assert '"routes"' not in config
           print("Admin UI wiring, embedded asset sync, and route safety checks passed.")
           PY
+      - name: Verify draft capability gating and D1 schema health
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          api = Path("admin-api/src/index.js").read_text(encoding="utf-8")
+          test = Path("admin-api/test/security.test.js").read_text(encoding="utf-8")
+          ui = Path("admin-ui/public/app.js").read_text(encoding="utf-8")
+          html = Path("admin-ui/public/index.html").read_text(encoding="utf-8")
+          assert 'PRAGMA table_info(admin_drafts)' in api
+          assert 'missingMetadataColumns' in api
+          assert 'Draft list falls back cleanly when metadata migration is not installed' in test
+          assert 'renderCapabilities(data.capabilities)' in ui
+          assert 'metadata !== false' in ui
+          assert 'featured-image-storage-note' in html
+          print("Schema health, migration fallback, and UI capability gating checks passed.")
+          PY
       - name: Validate draft migration and constraints
         run: |
           python - <<'PY'
