@@ -305,6 +305,39 @@ function insertHtmlAtCaret(html) {
   $("draft-body").value = $("block-editor").innerHTML;
   markDirty();
 }
+function syncEditorFromBody() {
+  $("block-editor").innerHTML = sanitizeRichHtml($("draft-body").value || "<p><br></p>");
+  $("body-length").textContent = `${$("block-editor").innerText.length.toLocaleString()} characters`;
+}
+function addEditorCommand(label, command, value = null) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "button secondary";
+  button.textContent = label;
+  button.addEventListener("click", () => {
+    $("block-editor").focus();
+    document.execCommand(command, false, value);
+    $("draft-body").value = sanitizeRichHtml($("block-editor").innerHTML);
+    $("block-editor").innerHTML = $("draft-body").value;
+    markDirty();
+  });
+  $("block-toolbar-extra").append(button);
+}
+function initializeExtraEditorBlocks() {
+  addEditorCommand("Numbered list", "insertOrderedList");
+  addEditorCommand("Italic", "italic");
+  addEditorCommand("Underline", "underline");
+  addEditorCommand("Code", "formatBlock", "pre");
+  const undo = document.createElement("button");
+  undo.type = "button"; undo.className = "button secondary"; undo.textContent = "Undo";
+  undo.addEventListener("click", () => { $("block-editor").focus(); document.execCommand("undo"); $("draft-body").value=sanitizeRichHtml($("block-editor").innerHTML); markDirty(); });
+  const redo = document.createElement("button");
+  redo.type = "button"; redo.className = "button secondary"; redo.textContent = "Redo";
+  redo.addEventListener("click", () => { $("block-editor").focus(); document.execCommand("redo"); $("draft-body").value=sanitizeRichHtml($("block-editor").innerHTML); markDirty(); });
+  $("block-toolbar-extra").append(undo, redo);
+  $("draft-body").addEventListener("input", syncEditorFromBody);
+}
+initializeExtraEditorBlocks();
 async function imageAsDataUrl(file) {
   if (!file || !/^image\/(jpeg|png|webp)$/.test(file.type)) throw new Error("कृपया JPEG, PNG या WebP इमेज चुनें।");
   if (file.size > 12 * 1024 * 1024) throw new Error("मूल इमेज 12 MB से छोटी होनी चाहिए।");
