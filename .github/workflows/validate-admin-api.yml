@@ -48,6 +48,9 @@ jobs:
           assert 'id="block-editor"' in html and 'id="draft-seo-title"' in html
           assert 'id="draft-featured-image"' in html and 'id="draft-category"' in html
           assert 'block-editor' in js and 'insertHtmlAtCaret' in js
+          assert 'async function deleteDraft' in js
+          assert 'sanitizeRichHtml' in js
+          assert 'request.method === "DELETE"' in Path("admin-api/src/index.js").read_text(encoding="utf-8")
           assert 'id=\\\"block-editor\\\"' in worker
           assert '"workers_dev": false' in config
           assert '"routes"' not in config
