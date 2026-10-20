@@ -46,6 +46,11 @@ jobs:
           assert 'img-src data: blob:;' in js
           assert 'img-src data: blob: https:' not in js
           assert 'id="block-editor"' in html and 'id="insert-link-button"' in html and 'id="draft-seo-title"' in html
+          assert 'id="metadata-warning"' in html and 'id="block-toolbar-extra"' in html
+          assert 'function initializeExtraEditorBlocks' in js
+          assert '"Numbered list"' in js and '"Undo"' in js and '"Redo"' in js
+          assert 'state.metadataReady === false' in js
+          assert 'metadata-warning' in worker and 'Numbered list' in worker
           assert 'id="draft-featured-image"' in html and 'id="draft-category"' in html
           assert 'block-editor' in js and 'insertHtmlAtCaret' in js and 'insert-link-button' in js and 'article-button' in js
           assert 'async function deleteDraft' in js
