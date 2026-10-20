@@ -12,6 +12,8 @@ const JSON_HEADERS = {
   "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
 };
 const MAX_BODY_BYTES = 1_000_000;
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"]);
 let jwksCache = { domain: null, expiresAt: 0, keys: null, pending: null };
 
 function json(data, status = 200, extra = {}) {
@@ -48,15 +50,35 @@ function parseDraft(value) {
   const rawSlug = value.slug ?? "";
   const summary = value.summary ?? "";
   const bodyHtml = value.body_html ?? "";
+  const seoTitle = value.seo_title ?? "";
+  const seoDescription = value.seo_description ?? "";
+  const category = value.category ?? "";
+  const tags = value.tags ?? [];
+  const featuredImageUrl = value.featured_image_url ?? "";
+  const featuredImageAlt = value.featured_image_alt ?? "";
+  const canonicalUrl = value.canonical_url ?? "";
   if (typeof title !== "string" || !title.trim() || title.length > 240 ||
       typeof rawSlug !== "string" || rawSlug.length > 240 ||
       typeof summary !== "string" || summary.length > 600 ||
-      typeof bodyHtml !== "string" || bodyHtml.length > 500_000) {
+      typeof bodyHtml !== "string" || bodyHtml.length > 500_000 ||
+      typeof seoTitle !== "string" || seoTitle.length > 240 ||
+      typeof seoDescription !== "string" || seoDescription.length > 320 ||
+      typeof category !== "string" || category.length > 100 ||
+      !Array.isArray(tags) || tags.length > 30 || tags.some(tag => typeof tag !== "string" || tag.length > 60) ||
+      typeof featuredImageUrl !== "string" || featuredImageUrl.length > 2000 ||
+      typeof featuredImageAlt !== "string" || featuredImageAlt.length > 300 ||
+      typeof canonicalUrl !== "string" || canonicalUrl.length > 500) {
     return { error: "One or more fields are invalid or exceed the allowed limit." };
+  }
+  for (const candidate of [featuredImageUrl, canonicalUrl]) {
+    if (candidate) {
+      try { const parsed = new URL(candidate); if (parsed.protocol !== "https:") return { error: "Image and canonical URLs must use HTTPS." }; }
+      catch { return { error: "Image and canonical URLs must be valid HTTPS URLs." }; }
+    }
   }
   const slug = safeSlug(rawSlug);
   if (!slug || slug.length > 140) return { error: "A valid slug is required." };
-  return { data: { title: title.trim(), slug, summary: summary.trim(), body_html: bodyHtml } };
+  return { data: { title: title.trim(), slug, summary: summary.trim(), body_html: bodyHtml, seo_title: seoTitle.trim(), seo_description: seoDescription.trim(), category: category.trim(), tags, featured_image_url: featuredImageUrl.trim(), featured_image_alt: featuredImageAlt.trim(), canonical_url: canonicalUrl.trim() } };
 }
 
 function hasValidClaims(claims, teamDomain, audience, now = Math.floor(Date.now() / 1000)) {
@@ -199,7 +221,7 @@ export default {
     const cors = originOK ? {
       "access-control-allow-origin": new URL(env.ADMIN_ORIGIN).origin,
       "access-control-allow-methods": "GET, POST, PUT, OPTIONS",
-      "access-control-allow-headers": "content-type",
+      "access-control-allow-headers": "content-type, x-image-content-type",
       "vary": "Origin",
     } : {};
 
@@ -232,9 +254,9 @@ export default {
       }
       if (url.pathname === "/api/drafts" && request.method === "GET") {
         const result = await env.DB.prepare(
-          "SELECT id, title, slug, summary, status, created_at, updated_at FROM admin_drafts ORDER BY updated_at DESC LIMIT 100"
+          "SELECT id, title, slug, summary, seo_title, seo_description, category, tags_json, featured_image_url, featured_image_alt, canonical_url, status, created_at, updated_at FROM admin_drafts ORDER BY updated_at DESC LIMIT 100"
         ).all();
-        return json({ drafts: result.results ?? [] }, 200, cors);
+        return json({ drafts: (result.results ?? []).map(row => { try { row.tags = JSON.parse(row.tags_json || "[]"); } catch { row.tags = []; } return row; }) }, 200, cors);
       }
       if (url.pathname === "/api/drafts" && request.method === "POST") {
         const body = await readJsonBody(request);
@@ -245,8 +267,8 @@ export default {
         const id = crypto.randomUUID();
         try {
           await env.DB.prepare(
-            "INSERT INTO admin_drafts (id, title, slug, summary, body_html, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'draft', ?, ?)"
-          ).bind(id, parsed.data.title, parsed.data.slug, parsed.data.summary, parsed.data.body_html, now, now).run();
+            "INSERT INTO admin_drafts (id, title, slug, summary, body_html, seo_title, seo_description, category, tags_json, featured_image_url, featured_image_alt, canonical_url, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)"
+          ).bind(id, parsed.data.title, parsed.data.slug, parsed.data.summary, parsed.data.body_html, parsed.data.seo_title, parsed.data.seo_description, parsed.data.category, JSON.stringify(parsed.data.tags), parsed.data.featured_image_url, parsed.data.featured_image_alt, parsed.data.canonical_url, now, now).run();
         } catch (error) {
           if (String(error?.message || error).toLowerCase().includes("unique")) {
             return json({ error: "This slug is already in use." }, 409, cors);
@@ -258,9 +280,11 @@ export default {
       const match = url.pathname.match(/^\/api\/drafts\/([0-9a-f-]{36})$/i);
       if (match && request.method === "GET") {
         const draft = await env.DB.prepare(
-          "SELECT id, title, slug, summary, body_html, status, created_at, updated_at FROM admin_drafts WHERE id = ?"
+          "SELECT id, title, slug, summary, body_html, seo_title, seo_description, category, tags_json, featured_image_url, featured_image_alt, canonical_url, status, created_at, updated_at FROM admin_drafts WHERE id = ?"
         ).bind(match[1]).first();
-        return draft ? json({ draft }, 200, cors) : json({ error: "Draft not found." }, 404, cors);
+        if (!draft) return json({ error: "Draft not found." }, 404, cors);
+        try { draft.tags = JSON.parse(draft.tags_json || "[]"); } catch { draft.tags = []; }
+        return json({ draft }, 200, cors);
       }
       if (match && request.method === "PUT") {
         const body = await readJsonBody(request);
@@ -270,8 +294,8 @@ export default {
         const now = new Date().toISOString();
         try {
           const result = await env.DB.prepare(
-            "UPDATE admin_drafts SET title = ?, slug = ?, summary = ?, body_html = ?, updated_at = ? WHERE id = ?"
-          ).bind(parsed.data.title, parsed.data.slug, parsed.data.summary, parsed.data.body_html, now, match[1]).run();
+            "UPDATE admin_drafts SET title = ?, slug = ?, summary = ?, body_html = ?, seo_title = ?, seo_description = ?, category = ?, tags_json = ?, featured_image_url = ?, featured_image_alt = ?, canonical_url = ?, updated_at = ? WHERE id = ?"
+          ).bind(parsed.data.title, parsed.data.slug, parsed.data.summary, parsed.data.body_html, parsed.data.seo_title, parsed.data.seo_description, parsed.data.category, JSON.stringify(parsed.data.tags), parsed.data.featured_image_url, parsed.data.featured_image_alt, parsed.data.canonical_url, now, match[1]).run();
           if (!result.meta?.changes) return json({ error: "Draft not found." }, 404, cors);
         } catch (error) {
           if (String(error?.message || error).toLowerCase().includes("unique")) {
@@ -280,6 +304,30 @@ export default {
           return safeError();
         }
         return json({ id: match[1], status: "draft", updated_at: now }, 200, cors);
+      }
+      const reviewMatch = url.pathname.match(/^\/api\/drafts\/([0-9a-f-]{36})\/review$/i);
+      if (reviewMatch && request.method === "POST") {
+        const now = new Date().toISOString();
+        const result = await env.DB.prepare("UPDATE admin_drafts SET status = 'ready_for_review', updated_at = ? WHERE id = ? AND status = 'draft'").bind(now, reviewMatch[1]).run();
+        if (!result.meta?.changes) return json({ error: "Draft not found or already submitted." }, 409, cors);
+        return json({ id: reviewMatch[1], status: "ready_for_review", updated_at: now }, 200, cors);
+      }
+      if (url.pathname === "/api/media" && request.method === "POST") {
+        if (!env.MEDIA) return json({ error: "Image upload is not enabled yet. Enable Cloudflare R2 and bind the private Admin media bucket first." }, 503, cors);
+        const type = (request.headers.get("x-image-content-type") || request.headers.get("content-type") || "").toLowerCase();
+        if (!IMAGE_TYPES.has(type)) return json({ error: "Only JPEG, PNG, WebP, GIF and AVIF images are supported." }, 415, cors);
+        const declared = Number(request.headers.get("content-length") || 0);
+        if (declared > MAX_IMAGE_BYTES) return json({ error: "Image must be 5 MB or smaller." }, 413, cors);
+        if (!request.body) return json({ error: "Image data is required." }, 400, cors);
+        try {
+          const bytes = await request.arrayBuffer();
+          if (!bytes.byteLength || bytes.byteLength > MAX_IMAGE_BYTES) return json({ error: "Image must be between 1 byte and 5 MB." }, 413, cors);
+          const ext = ({ "image/jpeg":"jpg", "image/png":"png", "image/webp":"webp", "image/gif":"gif", "image/avif":"avif" })[type];
+          const key = "posts/" + crypto.randomUUID() + "." + ext;
+          await env.MEDIA.put(key, bytes, { httpMetadata: { contentType: type, cacheControl: "public, max-age=31536000, immutable" }, customMetadata: { uploadedBy: env.ADMIN_EMAIL } });
+          if (typeof env.MEDIA_PUBLIC_BASE !== "string" || !env.MEDIA_PUBLIC_BASE.startsWith("https://")) return json({ error: "Upload stored, but a dedicated public media hostname is not configured. Do not publish this image until that is configured.", key }, 503, cors);
+          return json({ key, url: env.MEDIA_PUBLIC_BASE.replace(/\/$/, "") + "/" + key, size: bytes.byteLength, content_type: type }, 201, cors);
+        } catch { return safeError(); }
       }
       return json({ error: "Not found." }, 404, cors);
     } catch {
