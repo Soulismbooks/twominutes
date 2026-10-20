@@ -32,6 +32,14 @@ export default {
       });
     }
     const url = new URL(request.url);
+    if (url.pathname === "/api" || url.pathname.startsWith("/api/")) {
+      // Private service binding: no public API hostname or workers.dev endpoint.
+      const response = await env.ADMIN_API.fetch(request);
+      const headers = new Headers(response.headers);
+      for (const [key, value] of Object.entries(SECURITY_HEADERS)) headers.set(key, value);
+      headers.set("cache-control", "no-store, max-age=0");
+      return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+    }
     if (url.pathname === "/") {
       const assetResponse = await env.ASSETS.fetch(new Request(new URL("/index.html", url), { method: request.method, headers: request.headers }));
       const headers = new Headers(assetResponse.headers);
