@@ -324,6 +324,7 @@ $("review-button").addEventListener("click", async () => {
 });
 
 
+
 // Read from the protected API at startup. There are no demo rows or guessed metrics.
 refreshDrafts();
 
