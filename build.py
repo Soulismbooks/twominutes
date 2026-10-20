@@ -51,10 +51,20 @@ for e in root.findall("a:entry", NS):
     fn = e.findtext("b:filename", namespaces=NS)
     if status != "LIVE" or typ not in ("POST", "PAGE") or not fn: continue
     c = e.findtext("a:content", namespaces=NS) or ""
+    summary = clean_title(e.findtext("a:summary", namespaces=NS) or "")
+    seo_title = clean_title(e.findtext("b:seo-title", namespaces=NS) or "")
+    seo_description = clean_title(e.findtext("b:seo-description", namespaces=NS) or "")
+    canonical_url = clean_title(e.findtext("b:canonical-url", namespaces=NS) or "")
+    featured_image_url = clean_title(e.findtext("b:featured-image-url", namespaces=NS) or "")
+    featured_image_alt = clean_title(e.findtext("b:featured-image-alt", namespaces=NS) or "")
     d = dict(type=typ, path=normalize_blogger_path(fn), title=clean_title(e.findtext("a:title", namespaces=NS)),
              pub=(e.findtext("a:published", namespaces=NS) or "")[:10],
              upd=(e.findtext("a:updated", namespaces=NS) or "")[:10],
-             content=tidy(c), desc=text_of(c), img=first_img(c),
+             content=tidy(c), desc=summary or text_of(c),
+             img=featured_image_url or first_img(c),
+             seo_title=seo_title, seo_description=seo_description,
+             canonical_url=canonical_url, featured_image_url=featured_image_url,
+             featured_image_alt=featured_image_alt,
              labels=[k.get("term") for k in e.findall("a:category", NS) if k.get("term")])
     (posts if typ == "POST" else pages).append(d)
 posts.sort(key=lambda p: p["pub"], reverse=True)
@@ -99,9 +109,11 @@ footer{border-top:1px solid var(--bd);background:#fff;color:var(--mut);font-size
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{transition:none!important}}
 """
 
-def layout(title, desc, path, body, img=None, article=None, noindex=False):
-    full = f"{title} | {SITE}" if path not in ("/",) else SITE
-    url = BASE + quote(pretty(path), safe="/%")
+def layout(title, desc, path, body, img=None, article=None, noindex=False, seo_title=None, canonical_url=None):
+    display_title = (seo_title or "").strip() or title
+    full = f"{display_title} | {SITE}" if path not in ("/",) else SITE
+    default_url = BASE + quote(pretty(path), safe="/%")
+    url = canonical_url if isinstance(canonical_url, str) and canonical_url.startswith("https://") and not any(ch in canonical_url for ch in '\\"<>\\n\\r') else default_url
     og = f'<meta property="og:image" content="{esc(img)}">' if img else ""
     art = f'<meta property="article:published_time" content="{article["pub"]}"><meta property="article:modified_time" content="{article["upd"]}">' if article else ""
     if article:
@@ -150,7 +162,7 @@ def layout(title, desc, path, body, img=None, article=None, noindex=False):
     return f"""<!doctype html><html lang="hi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{esc(full)}</title><meta name="description" content="{esc(desc)}"><link rel="canonical" href="{esc(url)}">
 {'<meta name="robots" content="noindex">' if noindex else ''}
-<meta property="og:title" content="{esc(title)}"><meta property="og:description" content="{esc(desc)}"><meta property="og:url" content="{esc(url)}"><meta property="og:type" content="{'article' if article else 'website'}"><meta property="og:site_name" content="{esc(SITE)}">{og}{art}
+<meta property="og:title" content="{esc(display_title)}"><meta property="og:description" content="{esc(desc)}"><meta property="og:url" content="{esc(url)}"><meta property="og:type" content="{'article' if article else 'website'}"><meta property="og:site_name" content="{esc(SITE)}">{og}{art}
 <meta name="twitter:card" content="summary_large_image"><link rel="alternate" type="application/atom+xml" title="{esc(SITE)}" href="/atom.xml"><link rel="icon" href="/favicon.ico">
 <script type="application/ld+json">{schema_json}</script>
 <style>{CSS}</style><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={ADSENSE}" crossorigin="anonymous"></script>
@@ -196,7 +208,10 @@ listing(posts, "/", homepage=True)
 for p in posts + pages:
     tags = "".join(f'<a href="/label/{slug(l)}/">{esc(l)}</a>' for l in p["labels"])
     meta = f'<div class="meta">{p["pub"]}</div>' if p["type"] == "POST" else ""
-    body = f'<article class="post"><h1>{esc(p["title"])}</h1>{meta}{p["content"]}</article>'
+    featured = ""
+    if p.get("featured_image_url") and p["featured_image_url"] not in p["content"]:
+        featured = f'<figure class="featured-image"><img src="{esc(p["featured_image_url"])}" alt="{esc(p.get("featured_image_alt", ""))}" loading="eager"></figure>'
+    body = f'<article class="post"><h1>{esc(p["title"])}</h1>{meta}{featured}{p["content"]}</article>'
     page_path = pretty(p["path"])
 
     # Time-sensitive news and scheme posts should clearly distinguish older reporting
@@ -228,7 +243,7 @@ for p in posts + pages:
         <h2>रिज़ल्ट की पुष्टि करें</h2><p>यह अनुमान सामान्य जानकारी के लिए है। अंतिम टैक्स आपकी आय के प्रकार, deductions, TDS, capital gains और लागू नियमों पर निर्भर कर सकता है। रिटर्न जमा करने से पहले Income Tax Department के आधिकारिक पोर्टल और लागू वित्त वर्ष के निर्देशों से राशि की पुष्टि करें।</p></section>"""
     if tags:
         body += f'<div class="tags">{tags}</div>'
-    write(p["path"], layout(p["title"], p["desc"], p["path"], body, p["img"], p if p["type"] == "POST" else None))
+    write(p["path"], layout(p["title"], p.get("seo_description") or p["desc"], p["path"], body, p["img"], p if p["type"] == "POST" else None, seo_title=p.get("seo_title"), canonical_url=p.get("canonical_url")))
 
 labels = {}
 for p in posts:
