@@ -142,6 +142,7 @@ function setForm(draft = {}) {
   $("draft-featured-alt").value = draft.featured_image_alt || "";
   $("featured-image-status").textContent = draft.featured_image ? "Featured image saved in draft." : "कोई featured image नहीं चुनी गई।";
   $("body-length").textContent = `${$("block-editor").innerText.length.toLocaleString()} characters`;
+  $("seo-description-count").textContent = String($("draft-seo-description").value.length);
   $("editor-heading").textContent = draft.id ? "Draft संपादित करें" : "नया लेख";
   $("save-button").textContent = draft.id ? "परिवर्तन सेव करें" : "Draft सेव करें";
   $("preview-panel").classList.add("hidden");
@@ -196,6 +197,28 @@ document.querySelectorAll("[data-command]").forEach((button) => button.addEventL
   $("draft-body").value = $("block-editor").innerHTML;
   markDirty();
 }));
+$("review-button").addEventListener("click", async () => {
+  if (!state.currentId) {
+    showMessage("पहले Draft सेव करें, फिर Review के लिए भेजें।");
+    return;
+  }
+  if (state.dirty || state.saving) {
+    showMessage("पहले सभी बदलाव सेव होने दें।");
+    return;
+  }
+  const confirmed = window.confirm("यह Draft review के लिए चिह्नित होगा। इससे वेबसाइट पर publish नहीं होगा। जारी रखें?");
+  if (!confirmed) return;
+  $("review-button").disabled = true;
+  try {
+    const result = await api(`/api/drafts/${encodeURIComponent(state.currentId)}/review`, { method: "PATCH" });
+    $("review-status").textContent = result.message || "Review के लिए भेज दिया गया।";
+    showMessage("Draft review state में है; कुछ भी public नहीं हुआ।", "success");
+    await editDraft(state.currentId);
+  } catch (error) {
+    $("review-button").disabled = false;
+    showMessage(error instanceof Error ? error.message : "Review state अपडेट नहीं हुई।");
+  }
+});
 function insertHtmlAtCaret(html) {
   $("block-editor").focus();
   document.execCommand("insertHTML", false, html);
