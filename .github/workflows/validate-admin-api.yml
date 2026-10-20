@@ -39,6 +39,9 @@ jobs:
           config = Path("admin-ui/wrangler.jsonc").read_text(encoding="utf-8")
           assert 'href="/styles.css"' in html and 'src="/app.js"' in html
           assert '"/api/drafts"' in js
+          assert 'draft-seo-title' in html and 'draft-category' in html and 'draft-tags' in html
+          assert 'data-insert="h2"' in html and 'id="pick-image"' in html
+          assert '"/api/media"' in js and 'ready_for_review' in Path("admin-api/src/index.js").read_text(encoding="utf-8")
           assert 'sandbox="allow-scripts"' in html
           assert 'sandbox="allow-same-origin"' not in html
           assert 'srcdoc = buildPreviewDocument()' in js
@@ -56,8 +59,9 @@ jobs:
 
           db = sqlite3.connect(":memory:")
           db.executescript(Path("migrations/0001_admin_drafts.sql").read_text(encoding="utf-8"))
+          db.executescript(Path("migrations/0002_admin_editor_metadata.sql").read_text(encoding="utf-8"))
           columns = {row[1] for row in db.execute("PRAGMA table_info(admin_drafts)")}
-          required = {"id", "title", "slug", "summary", "body_html", "status", "created_at", "updated_at"}
+          required = {"id", "title", "slug", "summary", "body_html", "seo_title", "seo_description", "category", "tags_json", "featured_image_url", "featured_image_alt", "canonical_url", "status", "created_at", "updated_at"}
           assert required.issubset(columns), f"Missing columns: {required - columns}"
 
           row = ("1", "Example", "example-slug", "", "<p>Draft only</p>", "draft", "2026-10-20T00:00:00Z", "2026-10-20T00:00:00Z")
