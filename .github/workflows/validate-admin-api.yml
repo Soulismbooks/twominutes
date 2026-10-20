@@ -22,7 +22,10 @@ jobs:
         with:
           node-version: "22"
       - name: Check Worker JavaScript syntax
-        run: node --input-type=module --check < admin-api/src/index.js
+        run: node --check admin-api/src/index.js
+      - name: Run Admin API security tests
+        working-directory: admin-api
+        run: npm test
       - name: Validate draft migration and constraints
         run: |
           python - <<'PY'
