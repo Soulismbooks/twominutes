@@ -247,3 +247,25 @@ test("SEO metadata, categories, tags and featured image validation", () => {
   assert.ok(parseDraft({title:"x",slug:"x",featured_image:"https://evil.example/image.jpg",body_html:""}).error);
   assert.ok(parseDraft({title:"x",slug:"x",seo_description:"x".repeat(161),body_html:""}).error);
 });
+
+test("authorized DELETE removes only the selected draft", async () => {
+  const team = "delete-test-team.cloudflareaccess.com";
+  const signed = await makeJwt({ iss: `https://${team}` });
+  globalThis.fetch = async () => new Response(JSON.stringify({ keys: [signed.jwk] }), {
+    status: 200, headers: { "content-type": "application/json", "cache-control": "max-age=30" },
+  });
+  const removed = [];
+  const env = {
+    ACCESS_TEAM_DOMAIN: team, ACCESS_AUD: AUD, ADMIN_EMAIL: ADMIN,
+    ADMIN_ORIGIN: "https://admin.example.com",
+    DB: { prepare(sql) { return { bind(id) { return { async run() { removed.push({sql,id}); return {meta:{changes:1}}; } }; } }; } }
+  };
+  const { default: worker } = await import("../src/index.js");
+  const response = await worker.fetch(new Request("https://api.example.com/api/drafts/12345678-1234-1234-1234-123456789abc", {
+    method: "DELETE",
+    headers: { Origin: env.ADMIN_ORIGIN, "Cf-Access-Jwt-Assertion": signed.token },
+  }), env);
+  assert.equal(response.status, 200);
+  assert.equal(removed.length, 1);
+  assert.match(removed[0].sql, /DELETE FROM admin_drafts WHERE id = \?/);
+});
