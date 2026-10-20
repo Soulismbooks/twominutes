@@ -345,7 +345,7 @@ test("GET draft returns actionable migration error instead of opaque 500", async
   const env = {
     ACCESS_TEAM_DOMAIN: team, ACCESS_AUD: AUD, ADMIN_EMAIL: ADMIN,
     ADMIN_ORIGIN: "https://admin.example.com",
-    DB: { prepare() { return { async first() { throw new Error("no such column: seo_title"); } }; } }
+    DB: { prepare() { return { bind() { return { async first() { throw new Error("no such column: seo_title"); } }; } }; } }
   };
   const { default: worker } = await import("../src/index.js");
   const response = await worker.fetch(new Request("https://api.example.com/api/drafts/12345678-1234-1234-1234-123456789abc", {
