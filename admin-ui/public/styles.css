@@ -17,3 +17,8 @@
 .button.danger{color:#a52c22;border-color:#f0ceca;background:#fffafa}
 .button.danger:hover{background:#fdebe9}
 @media(max-width:520px){.draft-actions{flex-direction:column;align-items:stretch}.draft-actions .button{width:100%}}
+
+/* Article CTA blocks in editor and preview */
+.block-editor a.article-button{display:inline-block;background:#176b40;color:#fff;padding:.65rem .9rem;border-radius:.55rem;text-decoration:none;font-weight:700;margin:.35rem 0}
+.block-editor a{overflow-wrap:anywhere}
+@media(max-width:640px){.block-toolbar{gap:.4rem}.block-toolbar .button{min-height:40px;padding:.55rem .7rem}.block-editor{min-height:260px;padding:1rem}}
