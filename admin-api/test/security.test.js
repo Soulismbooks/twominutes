@@ -269,3 +269,67 @@ test("authorized DELETE removes only the selected draft", async () => {
   assert.equal(removed.length, 1);
   assert.match(removed[0].sql, /DELETE FROM admin_drafts WHERE id = \?/);
 });
+
+
+test("health route reports absent editor metadata columns without writing to D1", async () => {
+  const team = "schema-health-test.cloudflareaccess.com";
+  const signed = await makeJwt({ iss: `https://${team}` });
+  globalThis.fetch = async () => new Response(JSON.stringify({ keys: [signed.jwk] }), {
+    status: 200, headers: { "content-type": "application/json", "cache-control": "max-age=30" },
+  });
+  const queries = [];
+  const env = {
+    ACCESS_TEAM_DOMAIN: team, ACCESS_AUD: AUD, ADMIN_EMAIL: ADMIN,
+    ADMIN_ORIGIN: "https://admin.example.com",
+    DB: { prepare(sql) { queries.push(sql); return { async all() { return { results: [
+      {name:"id"},{name:"title"},{name:"slug"},{name:"summary"},{name:"body_html"},
+      {name:"status"},{name:"created_at"},{name:"updated_at"}
+    ] }; } }; } }
+  };
+  const { default: worker } = await import("../src/index.js");
+  const response = await worker.fetch(new Request("https://api.example.com/api/health", {
+    headers: { "Cf-Access-Jwt-Assertion": signed.token },
+  }), env);
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.ok, true);
+  assert.equal(body.schema.core, true);
+  assert.equal(body.schema.metadata, false);
+  assert.deepEqual(body.schema.missingMetadataColumns, ["seo_title","seo_description","category","tags","featured_image","featured_image_alt"]);
+  assert.ok(queries.every((sql) => /^PRAGMA table_info\(admin_drafts\)$/i.test(sql)));
+});
+
+test("draft list falls back cleanly when metadata migration is not installed", async () => {
+  const team = "schema-fallback-test.cloudflareaccess.com";
+  const signed = await makeJwt({ iss: `https://${team}` });
+  globalThis.fetch = async () => new Response(JSON.stringify({ keys: [signed.jwk] }), {
+    status: 200, headers: { "content-type": "application/json", "cache-control": "max-age=30" },
+  });
+  const queries = [];
+  const env = {
+    ACCESS_TEAM_DOMAIN: team, ACCESS_AUD: AUD, ADMIN_EMAIL: ADMIN,
+    ADMIN_ORIGIN: "https://admin.example.com",
+    DB: { prepare(sql) {
+      queries.push(sql);
+      return {
+        async all() {
+          if (/PRAGMA table_info/i.test(sql)) return {results:[
+            {name:"id"},{name:"title"},{name:"slug"},{name:"summary"},{name:"body_html"},
+            {name:"status"},{name:"created_at"},{name:"updated_at"}
+          ]};
+          return {results:[{id:"draft-1",title:"Test",slug:"test",category:"Happy Life",status:"draft"}]};
+        }
+      };
+    } }
+  };
+  const { default: worker } = await import("../src/index.js");
+  const response = await worker.fetch(new Request("https://api.example.com/api/drafts", {
+    headers: { "Cf-Access-Jwt-Assertion": signed.token },
+  }), env);
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.capabilities.metadata, false);
+  assert.equal(body.capabilities.publishing, false);
+  assert.equal(body.drafts[0].category, "Happy Life");
+  assert.ok(queries.some((sql) => /'' AS seo_title/.test(sql)));
+});
