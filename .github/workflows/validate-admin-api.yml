@@ -2,7 +2,7 @@ name: Validate admin API foundation
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, admin-auth-draft-save-foundation]
     paths:
       - "admin-api/**"
       - "admin-ui/**"
