@@ -41,7 +41,7 @@ jobs:
           assert '"/api/drafts"' in js
           assert 'sandbox="allow-scripts"' in html
           assert 'sandbox="allow-same-origin"' not in html
-          assert 'iframe.setAttribute("sandbox", "allow-scripts")' in js
+          assert 'srcdoc = buildPreviewDocument()' in js
           assert '"workers_dev": false' in config
           assert '"routes"' not in config
           print("Admin UI wiring and route safety checks passed.")
