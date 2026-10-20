@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Blogger feed.atom -> static site in ./public (old Blogger URLs preserved)."""
-import re, html, shutil, math
+import re, html, shutil, math, json
 from pathlib import Path
 from urllib.parse import quote
 import xml.etree.ElementTree as ET
@@ -60,6 +60,16 @@ for e in root.findall("a:entry", NS):
 posts.sort(key=lambda p: p["pub"], reverse=True)
 pages.sort(key=lambda p: p["title"])
 
+if not posts:
+    raise RuntimeError("Blogger feed contains no LIVE posts; refusing to generate an empty site.")
+
+# public/ is a generated build directory. Clear it only after the source feed
+# has parsed and at least one live post is available, preventing stale/orphaned
+# HTML files (including legacy .html.html duplicates) from surviving rebuilds.
+if OUT.exists():
+    shutil.rmtree(OUT)
+OUT.mkdir(parents=True, exist_ok=True)
+
 CSS = """:root{color-scheme:light;--bg:#f6f3eb;--fg:#24332c;--mut:#728078;--card:#fffefa;--acc:#66856e;--acc2:#9aaf91;--bd:#e5e2d8;--soft:#edf1e7;--shadow:0 8px 28px rgba(50,65,48,.07);--radius:18px}
 *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.8 system-ui,-apple-system,"Segoe UI","Noto Sans Devanagari",Roboto,sans-serif}
 a{color:var(--acc);text-underline-offset:3px}a:hover{color:#055c42}
@@ -83,7 +93,8 @@ h1{line-height:1.3;font-size:clamp(1.8rem,4vw,2.5rem);letter-spacing:-.6px}h2,h3
 .pager{display:flex;justify-content:space-between;gap:12px;margin-top:26px}.pager a{background:#fff;border:1px solid var(--bd);border-radius:11px;padding:8px 15px;text-decoration:none;font-weight:650}
 footer{border-top:1px solid var(--bd);background:#fff;color:var(--mut);font-size:.9rem;padding:27px 0}footer .w{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px}
 @media(min-width:980px){.posts{grid-template-columns:repeat(2,minmax(0,1fr))}.card{padding:25px 27px}.card .thumb,.card .thumb-fallback{width:calc(100% + 54px);margin:-25px -27px 17px}}
-@media(max-width:900px){.page-grid{grid-template-columns:minmax(0,1fr) 245px;gap:18px}}\n@media(max-width:700px){.tools-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.tool-card{padding:21px 11px 17px;min-height:216px}.tool-icon{font-size:2.35rem;width:65px;height:65px}.page-grid{grid-template-columns:1fr}.sidebar{position:static;grid-template-columns:1fr}.w{padding:0 14px}header.s .w{gap:9px}.posts{grid-template-columns:1fr;gap:13px}.card{min-height:0;padding:19px}.card .thumb,.card .thumb-fallback{width:calc(100% + 38px);margin:-19px -19px 15px;height:205px}.hero{border-radius:19px;margin-bottom:26px}.section-title{margin-top:27px}.section-title h1,.section-title h2{font-size:1.25rem}nav{gap:2px 13px}nav a{font-size:.84rem}.logo{font-size:.97rem}.post{border-radius:16px}}
+@media(max-width:900px){.page-grid{grid-template-columns:minmax(0,1fr) 245px;gap:18px}}
+@media(max-width:700px){.tools-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.tool-card{padding:21px 11px 17px;min-height:216px}.tool-icon{font-size:2.35rem;width:65px;height:65px}.page-grid{grid-template-columns:1fr}.sidebar{position:static;grid-template-columns:1fr}.w{padding:0 14px}header.s .w{gap:9px}.posts{grid-template-columns:1fr;gap:13px}.card{min-height:0;padding:19px}.card .thumb,.card .thumb-fallback{width:calc(100% + 38px);margin:-19px -19px 15px;height:205px}.hero{border-radius:19px;margin-bottom:26px}.section-title{margin-top:27px}.section-title h1,.section-title h2{font-size:1.25rem}nav{gap:2px 13px}nav a{font-size:.84rem}.logo{font-size:.97rem}.post{border-radius:16px}}
 @media(max-width:390px){.logo{font-size:.9rem;gap:8px}.logo:before{width:34px;height:34px;flex-basis:34px}nav{gap:2px 10px}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{transition:none!important}}
 """
@@ -93,6 +104,40 @@ def layout(title, desc, path, body, img=None, article=None, noindex=False):
     url = BASE + quote(pretty(path), safe="/%")
     og = f'<meta property="og:image" content="{esc(img)}">' if img else ""
     art = f'<meta property="article:published_time" content="{article["pub"]}"><meta property="article:modified_time" content="{article["upd"]}">' if article else ""
+    if article:
+        schema_data = {
+            "@context": "https://schema.org",
+            "@type": "BlogPosting",
+            "headline": title,
+            "description": desc,
+            "datePublished": article["pub"],
+            "dateModified": article["upd"] or article["pub"],
+            "mainEntityOfPage": {"@type": "WebPage", "@id": url},
+            "author": {"@type": "Person", "name": "Shashank Agnihotri"},
+            "publisher": {"@type": "Organization", "name": SITE, "url": BASE}
+        }
+        if img:
+            schema_data["image"] = [img]
+    elif path == "/":
+        schema_data = {
+            "@context": "https://schema.org",
+            "@type": "WebSite",
+            "name": SITE,
+            "url": BASE,
+            "description": desc,
+            "inLanguage": "hi-IN"
+        }
+    else:
+        schema_data = {
+            "@context": "https://schema.org",
+            "@type": "WebPage",
+            "name": title,
+            "description": desc,
+            "url": url,
+            "isPartOf": {"@type": "WebSite", "name": SITE, "url": BASE}
+        }
+    schema_json = json.dumps(schema_data, ensure_ascii=False).replace("</", "<\\/")
+
     nav = "".join(f'<a href="{esc(pretty(p["path"]))}">{esc(short(p["title"]))}</a>' for p in pages if p["path"] != "/p/2-minute-tips.html") + '<a href="/p/2-minute-tips">Contact</a>'
     category_counts = {}
     for post in posts:
@@ -107,6 +152,7 @@ def layout(title, desc, path, body, img=None, article=None, noindex=False):
 {'<meta name="robots" content="noindex">' if noindex else ''}
 <meta property="og:title" content="{esc(title)}"><meta property="og:description" content="{esc(desc)}"><meta property="og:url" content="{esc(url)}"><meta property="og:type" content="{'article' if article else 'website'}"><meta property="og:site_name" content="{esc(SITE)}">{og}{art}
 <meta name="twitter:card" content="summary_large_image"><link rel="alternate" type="application/atom+xml" title="{esc(SITE)}" href="/atom.xml"><link rel="icon" href="/favicon.ico">
+<script type="application/ld+json">{schema_json}</script>
 <style>{CSS}</style><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={ADSENSE}" crossorigin="anonymous"></script>
 </head><body><header class="s"><div class="w"><a class="logo" href="/">{esc(SITE)}</a><nav>{nav}</nav></div></header>
 <main class="w">{page_body}</main><footer><div class="w"><span>© {esc(SITE)} · छोटे कदम, बेहतर जीवन।</span><span><a href="/atom.xml">RSS Feed</a> · <a href="/sitemap.xml">Sitemap</a></span></div></footer></body></html>"""

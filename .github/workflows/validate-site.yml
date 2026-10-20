@@ -1,0 +1,69 @@
+name: Validate static site output
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "build.py"
+      - "feed.atom"
+      - ".github/workflows/validate-site.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Check Python syntax
+        run: python -m py_compile build.py
+      - name: Generate site in runner
+        run: python build.py
+      - name: Validate generated SEO files
+        run: |
+          python - <<'PY'
+          import json
+          import re
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          root = Path("public")
+          assert (root / "ads.txt").is_file(), "ads.txt missing"
+          ads = (root / "ads.txt").read_text(encoding="utf-8")
+          assert "google.com, pub-5852664798648088, DIRECT, f08c47fec0942fa0" in ads, "AdSense publisher line mismatch"
+
+          sitemap = ET.parse(root / "sitemap.xml").getroot()
+          assert sitemap.tag.endswith("urlset"), "Invalid sitemap root"
+          assert len(list(sitemap)) >= 2, "Sitemap unexpectedly empty"
+
+          html_files = list(root.rglob("*.html"))
+          assert html_files, "No HTML pages generated"
+          missing_canonical = []
+          missing_ad_code = []
+          invalid_jsonld = []
+          for file in html_files:
+              source = file.read_text(encoding="utf-8")
+              if 'rel="canonical"' not in source:
+                  missing_canonical.append(str(file))
+              if "pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5852664798648088" not in source:
+                  missing_ad_code.append(str(file))
+              blocks = re.findall(r'<script type="application/ld\+json">(.*?)</script>', source, re.S)
+              if not blocks:
+                  invalid_jsonld.append(f"{file}: missing JSON-LD")
+              for block in blocks:
+                  try:
+                      json.loads(block)
+                  except Exception as exc:
+                      invalid_jsonld.append(f"{file}: invalid JSON-LD ({exc})")
+          assert not missing_canonical, "Pages missing canonical: " + ", ".join(missing_canonical[:10])
+          assert not missing_ad_code, "Pages missing AdSense loader: " + ", ".join(missing_ad_code[:10])
+          assert not invalid_jsonld, "Structured data problems: " + "; ".join(invalid_jsonld[:10])
+          print(f"Validated {len(html_files)} HTML files, sitemap, ads.txt, canonical tags and JSON-LD.")
+          PY
