@@ -235,9 +235,7 @@ function buildAtomEntry(draft, publishedAt = new Date().toISOString()) {
   const canonicalUrl = String(draft.canonical_url || "").trim();
   const seoTitle = String(draft.seo_title || "").trim();
   const seoDescription = String(draft.seo_description || "").trim();
-  const featuredMarkup = featuredUrl && !String(draft.body_html || "").includes(featuredUrl)
-    ? `<figure><img src="${xmlEscape(featuredUrl)}" alt="${xmlEscape(featuredAlt)}" loading="eager"></figure>\n` : "";
-  const bodyHtml = sanitizePublishedHtml(featuredMarkup + String(draft.body_html || ""));
+  const bodyHtml = sanitizePublishedHtml(String(draft.body_html || ""));
   const labels = [...new Set([draft.category, ...(Array.isArray(draft.tags) ? draft.tags : [])].map(v => String(v || "").trim()).filter(Boolean))].slice(0, 30);
   const categories = labels.map(label => `<category term="${xmlEscape(label)}" />`).join("\n");
   const permalink = `https://www.twominutes.in/${encodeURIComponent(slug)}.html`;
@@ -335,10 +333,8 @@ async function createPublicationPullRequest(draft, env) {
   const entry = buildAtomEntry(draft);
   const newFeed = appendAtomEntry(feed, entry, draft.slug);
   const refPath = `/repos/${GITHUB_REPO}/git/refs/heads/${branch}`;
-  let refCreated = false;
   try {
     await githubRequest(token, `/repos/${GITHUB_REPO}/git/refs`, "POST", { ref: `refs/heads/${branch}`, sha: mainSha });
-    refCreated = true;
   } catch {
     // A failed/retried request may have left the draft branch behind. Reuse it only after resetting to the exact main revision.
     await githubRequest(token, refPath, "PATCH", { sha: mainSha, force: true });
@@ -415,7 +411,7 @@ export default {
       }
       if (url.pathname === "/api/drafts" && request.method === "GET") {
         const result = await env.DB.prepare(
-          "SELECT id, title, slug, summary, seo_title, seo_description, category, tags_json, featured_image_url, featured_image_alt, canonical_url, status, created_at, updated_at FROM admin_drafts ORDER BY updated_at DESC LIMIT 100"
+          "SELECT id, title, slug, summary, seo_title, seo_description, category, tags_json, featured_image_url, featured_image_alt, canonical_url, github_pr_url, github_pr_number, status, created_at, updated_at FROM admin_drafts ORDER BY updated_at DESC LIMIT 100"
         ).all();
         return json({ drafts: (result.results ?? []).map(row => { try { row.tags = JSON.parse(row.tags_json || "[]"); } catch { row.tags = []; } return row; }) }, 200, cors);
       }
@@ -441,7 +437,7 @@ export default {
       const match = url.pathname.match(/^\/api\/drafts\/([0-9a-f-]{36})$/i);
       if (match && request.method === "GET") {
         const draft = await env.DB.prepare(
-          "SELECT id, title, slug, summary, body_html, seo_title, seo_description, category, tags_json, featured_image_url, featured_image_alt, canonical_url, status, created_at, updated_at FROM admin_drafts WHERE id = ?"
+          "SELECT id, title, slug, summary, body_html, seo_title, seo_description, category, tags_json, featured_image_url, featured_image_alt, canonical_url, github_pr_url, github_pr_number, status, created_at, updated_at FROM admin_drafts WHERE id = ?"
         ).bind(match[1]).first();
         if (!draft) return json({ error: "Draft not found." }, 404, cors);
         try { draft.tags = JSON.parse(draft.tags_json || "[]"); } catch { draft.tags = []; }
@@ -465,6 +461,31 @@ export default {
           return safeError();
         }
         return json({ id: match[1], status: "draft", updated_at: now }, 200, cors);
+      }
+      const publishMatch = url.pathname.match(/^\/api\/drafts\/([0-9a-f-]{36})\/publish$/i);
+      if (publishMatch && request.method === "POST") {
+        const draft = await env.DB.prepare(
+          "SELECT id, title, slug, summary, body_html, seo_title, seo_description, category, tags_json, featured_image_url, featured_image_alt, canonical_url, github_pr_url, github_pr_number, status FROM admin_drafts WHERE id = ?"
+        ).bind(publishMatch[1]).first();
+        if (!draft) return json({ error: "Draft not found." }, 404, cors);
+        if (draft.github_pr_url) return json({ id: draft.id, pull_request_url: draft.github_pr_url, pull_request_number: draft.github_pr_number, status: draft.status, existing: true }, 200, cors);
+        try { draft.tags = JSON.parse(draft.tags_json || "[]"); } catch { draft.tags = []; }
+        let publication;
+        try {
+          publication = await createPublicationPullRequest(draft, env);
+        } catch (error) {
+          if (error && error.status === 409) return json({ error: error.message }, 409, cors);
+          if (error && error.status === 503) return json({ error: error.message }, 503, cors);
+          return json({ error: "Could not create the GitHub publication PR. Check the Admin API GitHub secret and repository permissions, then retry." }, 502, cors);
+        }
+        const now = new Date().toISOString();
+        try {
+          await env.DB.prepare("UPDATE admin_drafts SET status = 'ready_for_review', github_pr_url = ?, github_pr_number = ?, updated_at = ? WHERE id = ?")
+            .bind(publication.pull_request_url, publication.pull_request_number, now, draft.id).run();
+        } catch {
+          return json({ ...publication, id: draft.id, warning: "The PR exists, but its link could not be saved to the draft record." }, 201, cors);
+        }
+        return json({ ...publication, id: draft.id, updated_at: now, existing: false }, 201, cors);
       }
       const reviewMatch = url.pathname.match(/^\/api\/drafts\/([0-9a-f-]{36})\/review$/i);
       if (reviewMatch && request.method === "POST") {
