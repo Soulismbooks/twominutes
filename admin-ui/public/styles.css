@@ -22,3 +22,7 @@
 .block-editor a.article-button{display:inline-block;background:#176b40;color:#fff;padding:.65rem .9rem;border-radius:.55rem;text-decoration:none;font-weight:700;margin:.35rem 0}
 .block-editor a{overflow-wrap:anywhere}
 @media(max-width:640px){.block-toolbar{gap:.4rem}.block-toolbar .button{min-height:40px;padding:.55rem .7rem}.block-editor{min-height:260px;padding:1rem}}
+
+#block-toolbar-extra{border-top:0;border-radius:0;padding-top:0}
+#block-toolbar-extra:empty{display:none}
+#featured-image-storage-note{display:block;color:#8a691b;background:#fff8e7;border:1px solid #f0dfb0;border-radius:8px;padding:8px 10px}
