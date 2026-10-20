@@ -127,11 +127,22 @@ async function refreshDrafts() {
 }
 $("draft-search").addEventListener("input", renderDrafts);
 
+function safeTags(value) {
+  try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed.filter(x => typeof x === "string") : []; }
+  catch { return []; }
+}
 function setForm(draft = {}) {
   $("draft-id").value = draft.id || "";
   $("draft-title").value = draft.title || "";
   $("draft-slug").value = draft.slug || "";
   $("draft-summary").value = draft.summary || "";
+  $("draft-seo-title").value = draft.seo_title || "";
+  $("draft-seo-description").value = draft.seo_description || "";
+  $("draft-category").value = draft.category || "";
+  $("draft-tags").value = Array.isArray(draft.tags) ? draft.tags.join(", ") : (draft.tags_json ? safeTags(draft.tags_json).join(", ") : "");
+  $("draft-featured-image").value = draft.featured_image_url || "";
+  $("draft-featured-alt").value = draft.featured_image_alt || "";
+  $("draft-canonical").value = draft.canonical_url || "";
   $("draft-body").value = draft.body_html || "";
   $("body-length").textContent = `${$("draft-body").value.length.toLocaleString()} characters`;
   $("editor-heading").textContent = draft.id ? "Draft संपादित करें" : "नया लेख";
@@ -158,6 +169,13 @@ function formData() {
     slug: $("draft-slug").value,
     summary: $("draft-summary").value,
     body_html: $("draft-body").value,
+    seo_title: $("draft-seo-title").value,
+    seo_description: $("draft-seo-description").value,
+    category: $("draft-category").value,
+    tags: $("draft-tags").value.split(",").map(tag => tag.trim()).filter(Boolean).slice(0, 30),
+    featured_image_url: $("draft-featured-image").value,
+    featured_image_alt: $("draft-featured-alt").value,
+    canonical_url: $("draft-canonical").value,
   };
 }
 function markDirty() {
@@ -170,7 +188,7 @@ function markDirty() {
     state.timer = setTimeout(() => saveDraft({ automatic: true }), 1200);
   }
 }
-["draft-title", "draft-slug", "draft-summary", "draft-body"].forEach((id) => $(id).addEventListener("input", markDirty));
+["draft-title", "draft-slug", "draft-summary", "draft-seo-title", "draft-seo-description", "draft-category", "draft-tags", "draft-featured-image", "draft-featured-alt", "draft-canonical", "draft-body"].forEach((id) => $(id).addEventListener("input", markDirty));
 
 async function saveDraft({ automatic = false } = {}) {
   if (state.saving) { state.dirty = true; return; }
@@ -241,3 +259,69 @@ window.addEventListener("beforeunload", (event) => {
 
 // Read from the protected API at startup. There are no demo rows or guessed metrics.
 refreshDrafts();
+
+const blockTemplates = {
+  h2: "<h2>नया शीर्षक</h2>\n",
+  p: "<p>यहाँ अपना पैराग्राफ लिखें।</p>\n",
+  ul: "<ul>\n  <li>पहला बिंदु</li>\n  <li>दूसरा बिंदु</li>\n</ul>\n",
+  ol: "<ol>\n  <li>पहला चरण</li>\n  <li>दूसरा चरण</li>\n</ol>\n",
+  blockquote: "<blockquote><p>यहाँ महत्वपूर्ण विचार लिखें।</p></blockquote>\n",
+  hr: "<hr>\n",
+};
+document.querySelectorAll("[data-insert]").forEach(button => button.addEventListener("click", () => {
+  const area = $("draft-body");
+  const snippet = blockTemplates[button.dataset.insert];
+  if (!snippet) return;
+  const start = area.selectionStart ?? area.value.length;
+  const end = area.selectionEnd ?? start;
+  area.setRangeText(snippet, start, end, "select");
+  area.focus();
+  markDirty();
+}));
+$("pick-image").addEventListener("click", () => $("image-file").click());
+$("image-file").addEventListener("change", async () => {
+  const file = $("image-file").files?.[0];
+  if (!file) return;
+  const status = $("image-upload-state");
+  if (file.size > 5 * 1024 * 1024) { status.textContent = "चित्र 5 MB से छोटा होना चाहिए।"; return; }
+  if (!/^image\/(jpeg|png|webp|gif|avif)$/.test(file.type)) { status.textContent = "JPEG, PNG, WebP, GIF या AVIF चित्र चुनें।"; return; }
+  status.textContent = "चित्र अपलोड हो रहा है…";
+  try {
+    const response = await fetch("/api/media", {
+      method: "POST", credentials: "same-origin", cache: "no-store",
+      headers: { "content-type": file.type, "x-image-content-type": file.type },
+      body: file
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "Image upload असफल हुआ।");
+    if (!data.url) throw new Error("Public image URL नहीं मिला।");
+    $("draft-featured-image").value = data.url;
+    const alt = $("draft-featured-alt").value || file.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ");
+    $("draft-featured-alt").value = alt;
+    const area = $("draft-body");
+    const pos = area.selectionStart ?? area.value.length;
+    const imageHtml = '<figure><img src="' + escapeHtml(data.url) + '" alt="' + escapeHtml(alt) + '" loading="lazy"><figcaption>चित्र का कैप्शन यहाँ लिखें</figcaption></figure>\n';
+    area.setRangeText(imageHtml, pos, area.selectionEnd ?? pos, "end");
+    markDirty();
+    status.textContent = "चित्र अपलोड हुआ और लेख में जोड़ा गया।";
+  } catch (error) {
+    status.textContent = error.message || "चित्र अपलोड नहीं हुआ।";
+  } finally {
+    $("image-file").value = "";
+  }
+});
+document.querySelectorAll("[data-preview-width]").forEach(button => button.addEventListener("click", () => {
+  $("preview-frame").classList.toggle("mobile-preview", button.dataset.previewWidth === "mobile");
+  $("preview-frame").classList.toggle("desktop-preview", button.dataset.previewWidth === "desktop");
+}));
+$("review-button").addEventListener("click", async () => {
+  if (state.dirty) await saveDraft();
+  if (!state.currentId) { showMessage("पहले Draft को सफलतापूर्वक सेव करें।"); return; }
+  if (state.dirty || state.saving) { showMessage("सेव पूरा होने के बाद Review भेजें।"); return; }
+  try {
+    await api("/api/drafts/" + encodeURIComponent(state.currentId) + "/review", { method: "POST" });
+    setSaveState("Review queue में भेजा गया", "saved");
+    showMessage("Draft Review queue में भेज दिया गया। अभी सार्वजनिक वेबसाइट पर प्रकाशित नहीं हुआ।", "success");
+    await refreshDrafts();
+  } catch (error) { showMessage(error.message || "Review request असफल हुई।"); }
+});
