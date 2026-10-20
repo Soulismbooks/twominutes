@@ -199,6 +199,17 @@ for p in posts + pages:
     body = f'<article class="post"><h1>{esc(p["title"])}</h1>{meta}{p["content"]}</article>'
     page_path = pretty(p["path"])
 
+    # Time-sensitive news and scheme posts should clearly distinguish older reporting
+    # from current official status. Keep the original article and its URL intact.
+    freshness_labels = {"finance news", "telecom", "up basic education", "tax"}
+    if p["pub"] and p["pub"] < "2026-04-20" and any(
+        label.strip().lower() in freshness_labels for label in p["labels"]
+    ):
+        body += """<aside class="post" aria-label="सूचना की तारीख">
+        <h2>महत्वपूर्ण: पुरानी सूचना की पुष्टि करें</h2>
+        <p>यह लेख पहले प्रकाशित जानकारी पर आधारित है। सरकारी योजनाओं, भर्ती, टैक्स, टेलीकॉम दरों और वित्तीय नियमों में बदलाव हो सकता है। आवेदन, भुगतान या कोई निर्णय लेने से पहले संबंधित विभाग/कंपनी की आधिकारिक वेबसाइट पर वर्तमान तारीख, पात्रता, शुल्क और अंतिम तिथि की पुष्टि करें। इस लेख को वर्तमान आधिकारिक घोषणा का विकल्प न मानें।</p>
+        </aside>"""
+
     # Add original, practical guidance around the existing tools without changing their
     # calculation code or the underlying Blogger content.
     if page_path == "/p/emi-calculator-online":
@@ -255,7 +266,12 @@ atom = ['<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/20
 for p in posts[:25]:
     atom.append(f'<entry><title>{esc(p["title"])}</title><id>{BASE}{pretty(p["path"])}</id><link href="{BASE}{pretty(p["path"])}"/><published>{p["pub"]}T00:00:00Z</published><updated>{p["upd"]}T00:00:00Z</updated><summary>{esc(p["desc"])}</summary></entry>')
 atom.append("</feed>"); write("/atom.xml", "".join(atom))
-urls = [(BASE + "/", posts[0]["upd"])] + [(BASE + quote(pretty(p["path"])), p["upd"]) for p in pages + posts] + [(BASE + f"/label/{slug(l)}/", items[0]["upd"]) for l, items in labels.items()]
+urls = (
+    [(BASE + "/", posts[0]["upd"])]
+    + [(BASE + quote(pretty(p["path"])), p["upd"]) for p in pages + posts]
+    + [(BASE + "/privacy-policy", "2026-10-20"), (BASE + "/disclaimer", "2026-10-20")]
+    + [(BASE + f"/label/{slug(l)}/", items[0]["upd"]) for l, items in labels.items()]
+)
 write("/sitemap.xml", '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + "".join(f"<url><loc>{esc(u)}</loc><lastmod>{d}</lastmod></url>" for u, d in urls) + "</urlset>")
 write("/robots.txt", f"User-agent: *\nAllow: /\n\nSitemap: {BASE}/sitemap.xml\n")
 write("/ads.txt", f"google.com, pub-{ADSENSE.split('-')[-1]}, DIRECT, f08c47fec0942fa0\n")
