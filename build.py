@@ -60,6 +60,16 @@ for e in root.findall("a:entry", NS):
 posts.sort(key=lambda p: p["pub"], reverse=True)
 pages.sort(key=lambda p: p["title"])
 
+if not posts:
+    raise RuntimeError("Blogger feed contains no LIVE posts; refusing to generate an empty site.")
+
+# public/ is a generated build directory. Clear it only after the source feed
+# has parsed and at least one live post is available, preventing stale/orphaned
+# HTML files (including legacy .html.html duplicates) from surviving rebuilds.
+if OUT.exists():
+    shutil.rmtree(OUT)
+OUT.mkdir(parents=True, exist_ok=True)
+
 CSS = """:root{color-scheme:light;--bg:#f6f3eb;--fg:#24332c;--mut:#728078;--card:#fffefa;--acc:#66856e;--acc2:#9aaf91;--bd:#e5e2d8;--soft:#edf1e7;--shadow:0 8px 28px rgba(50,65,48,.07);--radius:18px}
 *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.8 system-ui,-apple-system,"Segoe UI","Noto Sans Devanagari",Roboto,sans-serif}
 a{color:var(--acc);text-underline-offset:3px}a:hover{color:#055c42}
