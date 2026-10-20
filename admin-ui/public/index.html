@@ -60,7 +60,27 @@
               <label class="field full"><span>लेख का शीर्षक <em>*</em></span><input id="draft-title" maxlength="240" required placeholder="जैसे: महँगाई में पैसे कैसे बचाएँ?"></label>
               <label class="field"><span>URL Slug <em>*</em></span><input id="draft-slug" maxlength="240" required placeholder="save-money-tips"><small>अंग्रेज़ी अक्षर, संख्या और dash उपयोग करें।</small></label>
               <label class="field"><span>छोटा विवरण</span><input id="draft-summary" maxlength="600" placeholder="लेख का संक्षिप्त परिचय"></label>
-              <label class="field full"><span>लेख की सामग्री (HTML समर्थित)</span><textarea id="draft-body" rows="14" maxlength="500000" placeholder="<h2>मुख्य विचार</h2>&#10;<p>यहाँ लेख लिखें…"></textarea><small>HTML/JavaScript यहाँ data के रूप में सेव होता है, Admin पेज पर execute नहीं किया जाता।</small></label>
+              <label class="field"><span>SEO Title</span><input id="draft-seo-title" maxlength="70" placeholder="Search results के लिए title"></label>
+              <label class="field full"><span>SEO Description</span><textarea id="draft-seo-description" rows="2" maxlength="160" placeholder="खोज परिणामों में दिखने वाला सारांश (लगभग 150–160 अक्षर)"></textarea></label>
+              <label class="field"><span>श्रेणी</span><select id="draft-category"><option value="Happy Life">Happy Life</option><option value="Money Tips">Money Tips</option><option value="Soulism">Soulism</option></select></label>
+              <label class="field"><span>Tags (comma से अलग करें)</span><input id="draft-tags" maxlength="400" placeholder="happiness, habits, life"></label>
+              <label class="field full"><span>Featured Image</span><input id="draft-featured-image" type="file" accept="image/jpeg,image/png,image/webp,image/gif"><input id="draft-featured-image-data" type="hidden"><input id="draft-featured-alt" maxlength="180" placeholder="इमेज का वर्णन (Alt text)"><small>छवि ब्राउज़र में resize होकर draft में embed होगी; PNG/JPEG/WebP चुनें। बड़ी फ़ाइलें compress होंगी।</small><div id="featured-image-status" class="muted">कोई featured image नहीं चुनी गई।</div></label>
+              <div class="field full">
+                <span>ब्लॉक एडिटर</span>
+                <div class="block-toolbar" role="toolbar" aria-label="Content formatting">
+                  <button class="button secondary" type="button" data-command="formatBlock" data-value="h2">H2 Heading</button>
+                  <button class="button secondary" type="button" data-command="formatBlock" data-value="h3">H3</button>
+                  <button class="button secondary" type="button" data-command="formatBlock" data-value="p">Paragraph</button>
+                  <button class="button secondary" type="button" data-command="bold">Bold</button>
+                  <button class="button secondary" type="button" data-command="insertUnorderedList">• List</button>
+                  <button class="button secondary" type="button" data-command="formatBlock" data-value="blockquote">Quote</button>
+                  <button class="button secondary" type="button" id="insert-image-button">Image जोड़ें</button>
+                  <input id="draft-inline-image" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+                </div>
+                <div id="block-editor" class="block-editor" contenteditable="true" role="textbox" aria-multiline="true" aria-label="लेख सामग्री संपादित करें"><p>यहाँ अपना लेख लिखना शुरू करें…</p></div>
+                <textarea id="draft-body" rows="8" maxlength="500000" hidden></textarea>
+                <small>Heading, paragraph, list, quote और image को बटन से जोड़ें। Preview sandbox में खुलता है।</small>
+              </div>
             </div>
             <div class="editor-footer"><span class="muted" id="body-length">0 characters</span><div class="button-row"><button id="preview-button" class="button secondary" type="button">Preview</button><button id="save-button" class="button primary" type="submit">Draft सेव करें</button></div></div>
           </form>
