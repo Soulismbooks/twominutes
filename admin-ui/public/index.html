@@ -84,10 +84,15 @@
               <label class="field full"><span>लेख की सामग्री (HTML समर्थित)</span><textarea id="draft-body" rows="14" maxlength="500000" placeholder="<h2>मुख्य विचार</h2>&#10;<p>यहाँ लेख लिखें…"></textarea><small>HTML/JavaScript यहाँ data के रूप में सेव होता है, Admin पेज पर execute नहीं किया जाता।</small></label>
               <div class="field full image-status-wrap"><span>Image Upload</span><div id="image-upload-state" class="upload-help">Gallery से चित्र चुनें। अपलोड के लिए Cloudflare R2 और public media hostname आवश्यक हैं।</div></div>
             </div>
-            <div class="editor-footer"><span class="muted" id="body-length">0 characters</span><div class="button-row"><button id="preview-button" class="button secondary" type="button">Preview</button><button id="review-button" class="button secondary" type="button">Review के लिए भेजें</button><button id="save-button" class="button primary" type="submit">Draft सेव करें</button></div></div>
+            <div class="editor-footer"><span class="muted" id="body-length">0 characters</span><div class="button-row"><button id="preview-button" class="button secondary" type="button">Preview</button><button id="publish-button" class="button secondary" type="button">Publish के लिए GitHub PR बनाएँ</button><button id="save-button" class="button primary" type="submit">Draft सेव करें</button></div></div>
           </form>
           <div id="preview-panel" class="preview-panel hidden"><div class="panel-heading"><div><h3>Sandboxed Preview</h3><p>लेख का responsive preview अलग sandbox में चलता है।</p></div><div class="button-row"><button class="button secondary" type="button" data-preview-width="mobile">Mobile</button><button class="button secondary" type="button" data-preview-width="desktop">Desktop</button><button id="close-preview" class="button secondary" type="button">बंद करें</button></div></div><iframe id="preview-frame" title="Sandboxed article preview" sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe></div>
-          <div class="publish-notice"><strong>सुरक्षित Publishing Workflow</strong><p>Review के लिए भेजने पर लेख review queue में जाएगा। सार्वजनिक वेबसाइट पर अपने-आप प्रकाशित नहीं होगा; GitHub PR, validation और स्पष्ट approval के बाद ही publish integration सक्रिय होगा।</p></div>
+          <div class="publish-notice"><strong>सुरक्षित Publishing</strong><p>यह बटन GitHub Pull Request बनाएगा। सार्वजनिक वेबसाइट पर लेख तभी जाएगा जब आप PR को review करके merge करेंगे।</p></div>
+            <div id="publish-pr-result" class="publish-pr-result hidden" role="status">
+              <strong>GitHub Pull Request तैयार है</strong>
+              <p><a id="publish-pr-link" href="#" target="_blank" rel="noopener noreferrer">GitHub PR खोलें →</a></p>
+              <small>PR merge होने से पहले सार्वजनिक वेबसाइट नहीं बदलेगी।</small>
+            </div>
         </div>
       </section>
 
