@@ -91,6 +91,22 @@ async function api(path, options = {}) {
   if (!response.ok) throw new Error(data.error || `Request असफल (HTTP ${response.status})`);
   return data;
 }
+function renderCapabilities(capabilities = {}) {
+  const metadataReady = capabilities.metadata !== false;
+  const imageMode = capabilities.imageStorage || "inline-draft-only";
+  const note = $("global-message");
+  if (!metadataReady) {
+    showMessage("चेतावनी: Admin D1 में SEO/Category/Tags की migration अभी लागू नहीं है। Metadata वाले बदलाव अभी सेव न करें।", "error");
+    $("save-button").disabled = true;
+    $("review-button").disabled = true;
+  } else {
+    $("save-button").disabled = false;
+    $("review-button").disabled = false;
+  }
+  $("featured-image-storage-note").textContent = imageMode === "r2"
+    ? "इमेज सुरक्षित media storage में रखी जाती है।"
+    : "R2 enable नहीं है: image अभी draft के अंदर सीमित आकार में सेव होती है; यह स्थायी media library नहीं है।";
+}
 
 function dateLabel(value) {
   if (!value) return "—";
@@ -171,6 +187,7 @@ async function refreshDrafts() {
     const data = await api("/api/drafts");
     if (!Array.isArray(data.drafts)) throw new Error("Draft API का response सही नहीं है।");
     state.drafts = data.drafts;
+    renderCapabilities(data.capabilities);
     $("identity-status").textContent = ADMIN_EMAIL;
     renderDrafts();
   } catch (error) {
@@ -354,7 +371,7 @@ $("draft-featured-image").addEventListener("change", async (event) => {
     $("featured-image-status").textContent = `Featured image तैयार · ${Math.round(data.length / 1024)} KB encoded`;
     if (!$("draft-featured-alt").value.trim()) $("draft-featured-alt").value = file.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ");
     markDirty();
-    showMessage("Featured image draft में जोड़ दी गई है।", "success");
+    showMessage("Featured image draft में जोड़ी गई है; वर्तमान में यह permanent R2 media storage नहीं है।", "success");
   } catch (error) {
     showMessage(error instanceof Error ? error.message : "Featured image जोड़ नहीं पाए।");
   } finally {
