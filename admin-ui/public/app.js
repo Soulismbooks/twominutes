@@ -144,6 +144,22 @@ function setForm(draft = {}) {
   $("draft-featured-alt").value = draft.featured_image_alt || "";
   $("draft-canonical").value = draft.canonical_url || "";
   $("draft-body").value = draft.body_html || "";
+  const savedPr = draft.github_pr_url || "";
+  const prPanel = $("publish-pr-result");
+  if (savedPr) {
+    try {
+      const parsedPr = new URL(savedPr);
+      if (parsedPr.origin === "https://github.com" && /^\/Soulismbooks\/twominutes\/pull\/\d+\/?$/.test(parsedPr.pathname)) {
+        $("publish-pr-link").href = parsedPr.toString();
+        prPanel.classList.remove("hidden");
+      } else {
+        prPanel.classList.add("hidden");
+      }
+    } catch { prPanel.classList.add("hidden"); }
+  } else {
+    prPanel.classList.add("hidden");
+    $("publish-pr-link").removeAttribute("href");
+  }
   $("body-length").textContent = `${$("draft-body").value.length.toLocaleString()} characters`;
   $("editor-heading").textContent = draft.id ? "Draft संपादित करें" : "नया लेख";
   $("save-button").textContent = draft.id ? "परिवर्तन सेव करें" : "Draft सेव करें";
@@ -311,16 +327,31 @@ document.querySelectorAll("[data-preview-width]").forEach(button => button.addEv
   $("preview-frame").classList.toggle("mobile-preview", button.dataset.previewWidth === "mobile");
   $("preview-frame").classList.toggle("desktop-preview", button.dataset.previewWidth === "desktop");
 }));
-$("review-button").addEventListener("click", async () => {
+$("publish-button").addEventListener("click", async () => {
   if (state.dirty) await saveDraft();
   if (!state.currentId) { showMessage("पहले Draft को सफलतापूर्वक सेव करें।"); return; }
-  if (state.dirty || state.saving) { showMessage("सेव पूरा होने के बाद Review भेजें।"); return; }
+  if (state.dirty || state.saving) { showMessage("सेव पूरा होने के बाद Publish PR बनाएँ।"); return; }
+  const button = $("publish-button");
+  button.disabled = true;
+  const originalLabel = button.textContent;
+  button.textContent = "GitHub PR बनाया जा रहा है…";
   try {
-    await api("/api/drafts/" + encodeURIComponent(state.currentId) + "/review", { method: "POST" });
-    setSaveState("Review queue में भेजा गया", "saved");
-    showMessage("Draft Review queue में भेज दिया गया। अभी सार्वजनिक वेबसाइट पर प्रकाशित नहीं हुआ।", "success");
+    const result = await api("/api/drafts/" + encodeURIComponent(state.currentId) + "/publish", { method: "POST" });
+    const prUrl = new URL(result.pull_request_url);
+    if (prUrl.origin !== "https://github.com" || !/^\/Soulismbooks\/twominutes\/pull\/\d+\/?$/.test(prUrl.pathname)) {
+      throw new Error("GitHub ने असुरक्षित या अप्रत्याशित PR link लौटाया।");
+    }
+    $("publish-pr-link").href = prUrl.toString();
+    $("publish-pr-result").classList.remove("hidden");
+    setSaveState("GitHub PR #" + result.pull_request_number + " तैयार", "saved");
+    showMessage(result.existing ? "इस Draft का GitHub PR पहले से मौजूद है। Public site merge होने तक नहीं बदलेगी।" : "GitHub PR तैयार है। सार्वजनिक वेबसाइट पर लेख केवल PR merge होने के बाद प्रकाशित होगा।", "success");
     await refreshDrafts();
-  } catch (error) { showMessage(error.message || "Review request असफल हुई।"); }
+  } catch (error) {
+    showMessage(error instanceof Error ? error.message : "GitHub publication PR नहीं बन पाया।");
+  } finally {
+    button.disabled = false;
+    button.textContent = originalLabel;
+  }
 });
 
 
