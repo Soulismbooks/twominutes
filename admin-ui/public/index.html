@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="hi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>twominutes.in — Admin Portal</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <a class="brand" href="#" aria-label="Admin home"><span class="brand-mark">2M</span><span>Two Minutes<small>Admin Portal</small></span></a>
+      <nav class="nav" aria-label="मुख्य नेविगेशन">
+        <button class="nav-link active" data-page="dashboard"><span>▦</span> Dashboard</button>
+        <button class="nav-link" data-page="drafts"><span>▤</span> Drafts <b id="draft-count" class="count">0</b></button>
+        <button class="nav-link" data-page="editor"><span>✎</span> नया लेख</button>
+        <button class="nav-link" data-page="analytics"><span>↗</span> Analytics</button>
+      </nav>
+      <div class="sidebar-bottom"><span class="secure-dot"></span> Protected workspace <small>Public website अलग रहेगी</small></div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div><p class="eyebrow">TWOMINUTES.IN / PRIVATE WORKSPACE</p><h1 id="page-title">Dashboard</h1></div>
+        <div class="top-actions"><span class="identity" id="identity-status">Access verification आवश्यक</span><button id="new-draft-top" class="button primary">＋ नया Draft</button></div>
+      </header>
+
+      <div id="global-message" class="message hidden" role="status" aria-live="polite"></div>
+
+      <section id="page-dashboard" class="page active">
+        <div class="intro"><div><h2>नमस्ते!</h2><p>अपने लेखों के drafts यहाँ सुरक्षित रूप से लिखें और संभालें।</p></div><span class="status-pill"><i></i> Draft storage</span></div>
+        <div class="stats">
+          <article class="stat"><span>कुल Drafts</span><strong id="stat-drafts">—</strong><small>Database से live count</small></article>
+          <article class="stat"><span>Last saved</span><strong id="stat-saved">—</strong><small>सबसे हाल का update</small></article>
+          <article class="stat"><span>Published posts</span><strong>—</strong><small>Publishing integration अभी बाकी</small></article>
+        </div>
+        <div class="panel">
+          <div class="panel-heading"><div><h2>हाल के Drafts</h2><p>Database से प्राप्त वास्तविक entries</p></div><button class="button secondary" data-page="drafts">सभी Drafts देखें</button></div>
+          <div id="recent-drafts" class="draft-list"><div class="empty"><span>◷</span><strong>Drafts लोड हो रहे हैं…</strong><p>Access login जाँचा जा रहा है।</p></div></div>
+        </div>
+        <div class="panel security-note"><span class="shield">✓</span><div><strong>सुरक्षा स्थिति</strong><p>यह UI केवल Access-protected hostname पर चलाने के लिए है। API से authentication असफल होने पर content नहीं दिखाया जाएगा।</p></div></div>
+      </section>
+
+      <section id="page-drafts" class="page">
+        <div class="panel">
+          <div class="panel-heading"><div><h2>सभी Drafts</h2><p>सिर्फ़ saved draft records; कोई अनुमानित data नहीं।</p></div><button class="button primary" data-page="editor">＋ नया Draft</button></div>
+          <label class="search-wrap"><span>⌕</span><input id="draft-search" type="search" placeholder="Title या slug खोजें" autocomplete="off"></label>
+          <div id="all-drafts" class="draft-list"><div class="empty"><strong>Drafts लोड हो रहे हैं…</strong></div></div>
+        </div>
+      </section>
+
+      <section id="page-editor" class="page">
+        <div class="panel editor-panel">
+          <div class="panel-heading"><div><h2 id="editor-heading">नया लेख</h2><p>आपकी लिखी सामग्री पहले Draft के रूप में सेव होगी।</p></div><span id="save-state" class="save-state">अभी सेव नहीं हुआ</span></div>
+          <form id="draft-form">
+            <input id="draft-id" type="hidden">
+            <div class="form-grid">
+              <label class="field full"><span>लेख का शीर्षक <em>*</em></span><input id="draft-title" maxlength="240" required placeholder="जैसे: महँगाई में पैसे कैसे बचाएँ?"></label>
+              <label class="field"><span>URL Slug <em>*</em></span><input id="draft-slug" maxlength="240" required placeholder="save-money-tips"><small>अंग्रेज़ी अक्षर, संख्या और dash उपयोग करें।</small></label>
+              <label class="field"><span>छोटा विवरण</span><input id="draft-summary" maxlength="600" placeholder="लेख का संक्षिप्त परिचय"></label>
+              <label class="field full"><span>लेख की सामग्री (HTML समर्थित)</span><textarea id="draft-body" rows="14" maxlength="500000" placeholder="<h2>मुख्य विचार</h2>&#10;<p>यहाँ लेख लिखें…"></textarea><small>HTML/JavaScript यहाँ data के रूप में सेव होता है, Admin पेज पर execute नहीं किया जाता।</small></label>
+            </div>
+            <div class="editor-footer"><span class="muted" id="body-length">0 characters</span><div class="button-row"><button id="preview-button" class="button secondary" type="button">Preview</button><button id="save-button" class="button primary" type="submit">Draft सेव करें</button></div></div>
+          </form>
+          <div id="preview-panel" class="preview-panel hidden"><div class="panel-heading"><div><h3>Sandboxed Preview</h3><p>HTML/JS अलग sandbox में चलता है, Admin page के origin में नहीं।</p></div><button id="close-preview" class="button secondary" type="button">बंद करें</button></div><iframe id="preview-frame" title="Sandboxed article preview" sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe></div>
+          <div class="publish-notice"><strong>Publish अभी बंद है</strong><p>Publish feature तब सक्रिय होगा जब GitHub PR-based publishing, validation और explicit approval flow पूरा होगा।</p></div>
+        </div>
+      </section>
+
+      <section id="page-analytics" class="page">
+        <div class="panel">
+          <div class="panel-heading"><div><h2>Analytics</h2><p>यहाँ कोई sample या मनगढ़ंत आंकड़ा नहीं दिखाया जाएगा।</p></div><span class="status-pill">अभी जुड़ा नहीं</span></div>
+          <div class="empty analytics-empty"><span>↗</span><strong>Analytics source configure करना बाकी है</strong><p>Cloudflare Web Analytics या किसी वास्तविक provider से data जोड़ने के बाद visitors, views, top pages और referrers दिखेंगे।</p></div>
+        </div>
+      </section>
+
+      <footer class="footer"><span>twominutes.in Admin Portal</span><span>अलग Admin service · Public site untouched</span></footer>
+    </main>
+  </div>
+  <noscript>Admin Portal उपयोग करने के लिए JavaScript आवश्यक है।</noscript>
+</body>
+</html>
