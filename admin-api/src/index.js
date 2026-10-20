@@ -207,6 +207,9 @@ function originAllowed(request, env) {
 function safeError() {
   return json({ error: "The request could not be completed." }, 500);
 }
+function isMissingColumnError(error) {
+  return /no such column|has no column named/i.test(String(error?.message || error));
+}
 
 export { normalizeTeamDomain, safeSlug, parseDraft, hasValidClaims, verifyAccessJwt, readJsonBody, originAllowed };
 
@@ -292,6 +295,7 @@ export default {
           if (String(error?.message || error).toLowerCase().includes("unique")) {
             return json({ error: "This slug is already in use." }, 409, cors);
           }
+          if (isMissingColumnError(error)) return json({ error: "Admin metadata migration is missing. Apply migrations/0002_admin_editor_metadata.sql to the dedicated Admin D1 database before saving metadata fields." }, 503, cors);
           return safeError();
         }
         return json({ id, status: "draft", created_at: now, updated_at: now }, 201, cors);
@@ -313,10 +317,18 @@ export default {
         return json({ id: match[1], deleted: true }, 200, cors);
       }
       if (match && request.method === "GET") {
-        const draft = await env.DB.prepare(
-          "SELECT id, title, slug, summary, body_html, seo_title, seo_description, category, tags, featured_image, featured_image_alt, status, created_at, updated_at FROM admin_drafts WHERE id = ?"
-        ).bind(match[1]).first();
-        return draft ? json({ draft }, 200, cors) : json({ error: "Draft not found." }, 404, cors);
+        try {
+          const draft = await env.DB.prepare(
+            "SELECT id, title, slug, summary, body_html, seo_title, seo_description, category, tags, featured_image, featured_image_alt, status, created_at, updated_at FROM admin_drafts WHERE id = ?"
+          ).bind(match[1]).first();
+          if (!draft) return json({ error: "Draft not found." }, 404, cors);
+          let tags = [];
+          try { tags = Array.isArray(draft.tags) ? draft.tags : JSON.parse(draft.tags || "[]"); } catch {}
+          return json({ draft: { ...draft, tags } }, 200, cors);
+        } catch (error) {
+          if (isMissingColumnError(error)) return json({ error: "Admin metadata migration is missing. Apply migrations/0002_admin_editor_metadata.sql to the dedicated Admin D1 database before editing metadata fields." }, 503, cors);
+          return safeError();
+        }
       }
       if (match && request.method === "PUT") {
         const body = await readJsonBody(request);
@@ -333,6 +345,7 @@ export default {
           if (String(error?.message || error).toLowerCase().includes("unique")) {
             return json({ error: "This slug is already in use." }, 409, cors);
           }
+          if (isMissingColumnError(error)) return json({ error: "Admin metadata migration is missing. Apply migrations/0002_admin_editor_metadata.sql to the dedicated Admin D1 database before saving metadata fields." }, 503, cors);
           return safeError();
         }
         return json({ id: match[1], status: "draft", updated_at: now }, 200, cors);
