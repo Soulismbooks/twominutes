@@ -50,8 +50,31 @@ jobs:
           assert 'img-src data: blob: https:' not in js
           assert '"workers_dev": false' in config
           assert '"routes"' not in config
+          assert js.index("const blockTemplates") < js.rindex("refreshDrafts();")
+          assert "const reader = request.body.getReader()" in api_source
           print("Admin UI wiring and route safety checks passed.")
           PY
+      - name: Verify embedded Worker assets match UI source
+        run: |
+          node --input-type=module <<'NODE'
+          import worker from "./admin-ui/src/index.js";
+          import { readFileSync } from "node:fs";
+          const files = [
+            ["/", "admin-ui/public/index.html"],
+            ["/index.html", "admin-ui/public/index.html"],
+            ["/styles.css", "admin-ui/public/styles.css"],
+            ["/app.js", "admin-ui/public/app.js"],
+          ];
+          for (const [route, file] of files) {
+            const response = await worker.fetch(new Request("https://admin.example" + route));
+            const actual = await response.text();
+            const expected = readFileSync(file, "utf8");
+            if (response.status !== 200 || actual !== expected) {
+              throw new Error("Embedded Worker asset mismatch: " + route);
+            }
+          }
+          console.log("Embedded Worker assets match source files.");
+          NODE
       - name: Validate draft migration and constraints
         run: |
           python - <<'PY'
