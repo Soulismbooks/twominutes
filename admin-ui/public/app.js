@@ -28,6 +28,7 @@ function sanitizeRichHtml(input) {
         safe.setAttribute("href", href);
         safe.setAttribute("rel", "noopener noreferrer");
         safe.setAttribute("target", "_blank");
+        if (node.classList.contains("article-button")) safe.setAttribute("class", "article-button");
       }
     }
     node.childNodes.forEach((child) => safe.append(clean(child)));
@@ -314,6 +315,20 @@ async function imageAsDataUrl(file) {
     URL.revokeObjectURL(objectUrl);
   }
 }
+$("insert-link-button").addEventListener("click", () => {
+  const label = window.prompt("लिंक या Button पर दिखने वाला टेक्स्ट लिखें:");
+  if (!label || !label.trim()) return;
+  const entered = window.prompt("पूरा HTTPS URL दर्ज करें:");
+  if (!entered) return;
+  let url;
+  try { url = new URL(entered.trim()); } catch { showMessage("कृपया सही HTTPS URL दर्ज करें।"); return; }
+  if (url.protocol !== "https:") { showMessage("सुरक्षा के लिए केवल HTTPS लिंक स्वीकार हैं।"); return; }
+  const isButton = window.confirm("क्या इसे Button की तरह दिखाना है? OK = Button, Cancel = सामान्य लिंक");
+  const safeLabel = escapeHtml(label.trim().slice(0, 120));
+  const safeUrl = escapeHtml(url.href);
+  insertHtmlAtCaret(`<a href="${safeUrl}"${isButton ? ' class="article-button"' : ""} target="_blank" rel="noopener noreferrer">${safeLabel}</a>`);
+  showMessage(isButton ? "Button block जोड़ दिया गया।" : "लिंक जोड़ दिया गया।", "success");
+});
 $("insert-image-button").addEventListener("click", () => $("draft-inline-image").click());
 $("draft-inline-image").addEventListener("change", async (event) => {
   const file = event.target.files?.[0];
@@ -395,7 +410,7 @@ function buildPreviewDocument() {
   const content = $("draft-body").value || "<p>No content yet.</p>";
   const csp = "default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'none'; font-src data:; form-action 'none'; base-uri 'none'";
   // The iframe is sandboxed without allow-same-origin; untrusted code cannot access the admin DOM or origin.
-  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title><style>body{font:16px/1.65 system-ui,sans-serif;padding:1rem;max-width:820px;margin:auto;color:#25392b;overflow-wrap:anywhere}img{max-width:100%;height:auto}pre,code{white-space:pre-wrap;overflow-wrap:anywhere}a{color:#176b40}</style></head><body><h1>${escapeHtml(title)}</h1>${content}</body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title><style>body{font:16px/1.65 system-ui,sans-serif;padding:1rem;max-width:820px;margin:auto;color:#25392b;overflow-wrap:anywhere}img{max-width:100%;height:auto}pre,code{white-space:pre-wrap;overflow-wrap:anywhere}a{color:#176b40}.article-button{display:inline-block;background:#176b40;color:#fff;padding:.7rem 1rem;border-radius:.6rem;text-decoration:none;font-weight:700;margin:.4rem 0}</style></head><body><h1>${escapeHtml(title)}</h1>${content}</body></html>`;
 }
 $("preview-button").addEventListener("click", () => {
   $("preview-frame").srcdoc = buildPreviewDocument();
