@@ -210,8 +210,74 @@ function safeError() {
 function isMissingColumnError(error) {
   return /no such column|has no column named/i.test(String(error?.message || error));
 }
+function analyticsConfigured(env) {
+  return typeof env.CLOUDFLARE_ANALYTICS_TOKEN === "string" && env.CLOUDFLARE_ANALYTICS_TOKEN.length > 20 &&
+    typeof env.ANALYTICS_ZONE_TAG === "string" && /^[a-f0-9]{32}$/i.test(env.ANALYTICS_ZONE_TAG) &&
+    env.ANALYTICS_HOST === "www.twominutes.in";
+}
+function safeMetric(value) {
+  return Number.isFinite(Number(value)) && Number(value) >= 0 ? Number(value) : 0;
+}
+async function loadZoneAnalytics(env, days = 7, fetchImpl = fetch) {
+  if (!analyticsConfigured(env)) return { error: "Analytics is not configured. Add the CLOUDFLARE_ANALYTICS_TOKEN Worker secret and set ANALYTICS_ZONE_TAG/ANALYTICS_HOST in the Admin API environment." };
+  if (![1, 7, 30].includes(days)) return { error: "Use days=1, 7 or 30." };
+  const end = new Date();
+  const start = new Date(end.getTime() - days * 24 * 60 * 60 * 1000);
+  const query = "query AdminPortalTraffic($zoneTag: string, $filter: filter) { viewer { zones(filter: { zoneTag: $zoneTag }) { aggregate: httpRequestsAdaptiveGroups(filter: $filter, limit: 1) { count sum { visits edgeResponseBytes } } daily: httpRequestsAdaptiveGroups(filter: $filter, limit: 31, orderBy: [datetimeDay_ASC]) { count sum { visits edgeResponseBytes } dimensions { datetimeDay } } topPaths: httpRequestsAdaptiveGroups(filter: $filter, limit: 10, orderBy: [count_DESC]) { count sum { visits edgeResponseBytes } dimensions { clientRequestPath } } } } }";
+  const variables = {
+    zoneTag: env.ANALYTICS_ZONE_TAG,
+    filter: {
+      datetime_geq: start.toISOString(),
+      datetime_lt: end.toISOString(),
+      requestSource: "eyeball",
+      clientRequestHTTPHost: env.ANALYTICS_HOST
+    }
+  };
+  try {
+    const response = await fetchImpl("https://api.cloudflare.com/client/v4/graphql", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer " + env.CLOUDFLARE_ANALYTICS_TOKEN,
+        accept: "application/json",
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({ query, variables }),
+      signal: AbortSignal.timeout(5000)
+    });
+    if (!response.ok) return { error: "Cloudflare Analytics request failed. Check the Analytics Read token and retry." };
+    const payload = await response.json();
+    if (Array.isArray(payload.errors) && payload.errors.length) return { error: "Cloudflare Analytics returned an error. Check the token permissions, zone and dataset availability." };
+    const zone = payload.data?.viewer?.zones?.[0];
+    if (!zone) return { error: "Cloudflare Analytics returned no zone data for the configured public hostname." };
+    const aggregate = zone.aggregate?.[0] || {};
+    return {
+      source: "Cloudflare GraphQL HTTP analytics",
+      host: env.ANALYTICS_HOST,
+      period: { days, start: start.toISOString(), end: end.toISOString() },
+      metrics: {
+        requests: safeMetric(aggregate.count),
+        visits: safeMetric(aggregate.sum?.visits),
+        dataTransferBytes: safeMetric(aggregate.sum?.edgeResponseBytes)
+      },
+      trend: (zone.daily || []).map((row) => ({
+        date: String(row.dimensions?.datetimeDay || ""),
+        requests: safeMetric(row.count),
+        visits: safeMetric(row.sum?.visits),
+        dataTransferBytes: safeMetric(row.sum?.edgeResponseBytes)
+      })).filter((row) => row.date),
+      topPaths: (zone.topPaths || []).map((row) => ({
+        path: String(row.dimensions?.clientRequestPath || "/").slice(0, 300),
+        requests: safeMetric(row.count),
+        visits: safeMetric(row.sum?.visits),
+        dataTransferBytes: safeMetric(row.sum?.edgeResponseBytes)
+      })).filter((row) => row.path)
+    };
+  } catch {
+    return { error: "Cloudflare Analytics is temporarily unavailable. No metrics were guessed or substituted." };
+  }
+}
 
-export { normalizeTeamDomain, safeSlug, parseDraft, hasValidClaims, verifyAccessJwt, readJsonBody, originAllowed };
+export { normalizeTeamDomain, safeSlug, parseDraft, hasValidClaims, verifyAccessJwt, readJsonBody, originAllowed, analyticsConfigured, loadZoneAnalytics };
 
 export default {
   async fetch(request, env) {
@@ -262,8 +328,19 @@ export default {
             missingCoreColumns: required.filter((column) => !columns.has(column)),
             missingMetadataColumns: metadata.filter((column) => !columns.has(column))
           },
-          capabilities: { imageStorage: "inline-draft-only", publishing: false, analytics: false }
+          capabilities: { imageStorage: "inline-draft-only", publishing: false, analytics: analyticsConfigured(env) }
         }, 200, cors);
+      }
+      if (url.pathname === "/api/analytics" && request.method === "GET") {
+        const requestedDays = url.searchParams.get("days") || "7";
+        const days = Number(requestedDays);
+        if (![1, 7, 30].includes(days)) return json({ error: "Use days=1, 7 or 30." }, 400, cors);
+        const result = await loadZoneAnalytics(env, days);
+        if (result.error) {
+          const status = analyticsConfigured(env) ? 502 : 503;
+          return json({ error: result.error }, status, cors);
+        }
+        return json(result, 200, cors);
       }
       if (url.pathname === "/api/drafts" && request.method === "GET") {
         // Schema health is checked before using metadata columns. This prevents a
