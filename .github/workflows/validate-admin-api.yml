@@ -37,11 +37,12 @@ jobs:
           html = Path("admin-ui/public/index.html").read_text(encoding="utf-8")
           js = Path("admin-ui/public/app.js").read_text(encoding="utf-8")
           config = Path("admin-ui/wrangler.jsonc").read_text(encoding="utf-8")
+          api_source = Path("admin-api/src/index.js").read_text(encoding="utf-8")
           assert 'href="/styles.css"' in html and 'src="/app.js"' in html
           assert '"/api/drafts"' in js
           assert 'draft-seo-title' in html and 'draft-category' in html and 'draft-tags' in html
           assert 'data-insert="h2"' in html and 'id="pick-image"' in html
-          assert '"/api/media"' in js and 'ready_for_review' in Path("admin-api/src/index.js").read_text(encoding="utf-8")
+          assert '"/api/media"' in js and "ready_for_review" in api_source
           assert 'sandbox="allow-scripts"' in html
           assert 'sandbox="allow-same-origin"' not in html
           assert 'srcdoc = buildPreviewDocument()' in js
