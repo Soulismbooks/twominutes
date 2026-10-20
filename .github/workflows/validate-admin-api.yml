@@ -44,6 +44,9 @@ jobs:
           assert 'srcdoc = buildPreviewDocument()' in js
           assert 'img-src data: blob:;' in js
           assert 'img-src data: blob: https:' not in js
+          assert 'id="block-editor"' in html and 'id="draft-seo-title"' in html
+          assert 'id="draft-featured-image"' in html and 'id="draft-category"' in html
+          assert 'block-editor' in js and 'insertHtmlAtCaret' in js
           assert '"workers_dev": false' in config
           assert '"routes"' not in config
           print("Admin UI wiring and route safety checks passed.")
@@ -73,5 +76,9 @@ jobs:
               raise AssertionError("Unexpected status was incorrectly accepted")
           except sqlite3.IntegrityError:
               pass
-          print("Draft schema and constraints validated.")
+          db.executescript(Path("migrations/0002_admin_editor_metadata.sql").read_text(encoding="utf-8"))
+          columns = {row[1] for row in db.execute("PRAGMA table_info(admin_drafts)")}
+          required_meta = {"seo_title", "seo_description", "category", "tags", "featured_image", "featured_image_alt"}
+          assert required_meta.issubset(columns), f"Missing metadata: {required_meta - columns}"
+          print("Draft schema and editor metadata constraints validated.")
           PY
