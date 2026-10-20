@@ -207,8 +207,77 @@ function originAllowed(request, env) {
 function safeError() {
   return json({ error: "The request could not be completed." }, 500);
 }
+function isMissingColumnError(error) {
+  return /no such column|has no column named/i.test(String(error?.message || error));
+}
+function analyticsConfigured(env) {
+  return typeof env.CLOUDFLARE_ANALYTICS_TOKEN === "string" && env.CLOUDFLARE_ANALYTICS_TOKEN.length > 20 &&
+    typeof env.ANALYTICS_ZONE_TAG === "string" && /^[a-f0-9]{32}$/i.test(env.ANALYTICS_ZONE_TAG) &&
+    env.ANALYTICS_HOST === "www.twominutes.in";
+}
+function safeMetric(value) {
+  return Number.isFinite(Number(value)) && Number(value) >= 0 ? Number(value) : 0;
+}
+async function loadZoneAnalytics(env, days = 7, fetchImpl = fetch) {
+  if (!analyticsConfigured(env)) return { error: "Analytics is not configured. Add the CLOUDFLARE_ANALYTICS_TOKEN Worker secret and set ANALYTICS_ZONE_TAG/ANALYTICS_HOST in the Admin API environment." };
+  if (![1, 7, 30].includes(days)) return { error: "Use days=1, 7 or 30." };
+  const end = new Date();
+  const start = new Date(end.getTime() - days * 24 * 60 * 60 * 1000);
+  const query = "query AdminPortalTraffic($zoneTag: string, $filter: filter) { viewer { zones(filter: { zoneTag: $zoneTag }) { aggregate: httpRequestsAdaptiveGroups(filter: $filter, limit: 1) { count sum { visits edgeResponseBytes } } daily: httpRequestsAdaptiveGroups(filter: $filter, limit: 31, orderBy: [datetimeDay_ASC]) { count sum { visits edgeResponseBytes } dimensions { datetimeDay } } topPaths: httpRequestsAdaptiveGroups(filter: $filter, limit: 10, orderBy: [count_DESC]) { count sum { visits edgeResponseBytes } dimensions { clientRequestPath } } } } }";
+  const variables = {
+    zoneTag: env.ANALYTICS_ZONE_TAG,
+    filter: {
+      datetime_geq: start.toISOString(),
+      datetime_lt: end.toISOString(),
+      requestSource: "eyeball",
+      clientRequestHTTPHost: env.ANALYTICS_HOST
+    }
+  };
+  try {
+    const response = await fetchImpl("https://api.cloudflare.com/client/v4/graphql", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer " + env.CLOUDFLARE_ANALYTICS_TOKEN,
+        accept: "application/json",
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({ query, variables }),
+      signal: AbortSignal.timeout(5000)
+    });
+    if (!response.ok) return { error: "Cloudflare Analytics request failed. Check the Analytics Read token and retry." };
+    const payload = await response.json();
+    if (Array.isArray(payload.errors) && payload.errors.length) return { error: "Cloudflare Analytics returned an error. Check the token permissions, zone and dataset availability." };
+    const zone = payload.data?.viewer?.zones?.[0];
+    if (!zone) return { error: "Cloudflare Analytics returned no zone data for the configured public hostname." };
+    const aggregate = zone.aggregate?.[0] || {};
+    return {
+      source: "Cloudflare GraphQL HTTP analytics",
+      host: env.ANALYTICS_HOST,
+      period: { days, start: start.toISOString(), end: end.toISOString() },
+      metrics: {
+        requests: safeMetric(aggregate.count),
+        visits: safeMetric(aggregate.sum?.visits),
+        dataTransferBytes: safeMetric(aggregate.sum?.edgeResponseBytes)
+      },
+      trend: (zone.daily || []).map((row) => ({
+        date: String(row.dimensions?.datetimeDay || ""),
+        requests: safeMetric(row.count),
+        visits: safeMetric(row.sum?.visits),
+        dataTransferBytes: safeMetric(row.sum?.edgeResponseBytes)
+      })).filter((row) => row.date),
+      topPaths: (zone.topPaths || []).map((row) => ({
+        path: String(row.dimensions?.clientRequestPath || "/").slice(0, 300),
+        requests: safeMetric(row.count),
+        visits: safeMetric(row.sum?.visits),
+        dataTransferBytes: safeMetric(row.sum?.edgeResponseBytes)
+      })).filter((row) => row.path)
+    };
+  } catch {
+    return { error: "Cloudflare Analytics is temporarily unavailable. No metrics were guessed or substituted." };
+  }
+}
 
-export { normalizeTeamDomain, safeSlug, parseDraft, hasValidClaims, verifyAccessJwt, readJsonBody, originAllowed };
+export { normalizeTeamDomain, safeSlug, parseDraft, hasValidClaims, verifyAccessJwt, readJsonBody, originAllowed, analyticsConfigured, loadZoneAnalytics };
 
 export default {
   async fetch(request, env) {
@@ -246,13 +315,47 @@ export default {
 
     try {
       if (url.pathname === "/api/health" && request.method === "GET") {
-        return json({ ok: true, service: "twominutes-admin-api" }, 200, cors);
+        const schema = await env.DB.prepare("PRAGMA table_info(admin_drafts)").all();
+        const columns = new Set((schema.results ?? []).map((column) => column.name));
+        const required = ["id", "title", "slug", "summary", "body_html", "status", "created_at", "updated_at"];
+        const metadata = ["seo_title", "seo_description", "category", "tags", "featured_image", "featured_image_alt"];
+        return json({
+          ok: required.every((column) => columns.has(column)),
+          service: "twominutes-admin-api",
+          schema: {
+            core: required.every((column) => columns.has(column)),
+            metadata: metadata.every((column) => columns.has(column)),
+            missingCoreColumns: required.filter((column) => !columns.has(column)),
+            missingMetadataColumns: metadata.filter((column) => !columns.has(column))
+          },
+          capabilities: { imageStorage: "inline-draft-only", publishing: false, analytics: analyticsConfigured(env) }
+        }, 200, cors);
+      }
+      if (url.pathname === "/api/analytics" && request.method === "GET") {
+        const requestedDays = url.searchParams.get("days") || "7";
+        const days = Number(requestedDays);
+        if (![1, 7, 30].includes(days)) return json({ error: "Use days=1, 7 or 30." }, 400, cors);
+        const result = await loadZoneAnalytics(env, days);
+        if (result.error) {
+          const status = analyticsConfigured(env) ? 502 : 503;
+          return json({ error: result.error }, status, cors);
+        }
+        return json(result, 200, cors);
       }
       if (url.pathname === "/api/drafts" && request.method === "GET") {
+        // Schema health is checked before using metadata columns. This prevents a
+        // missing/unapplied D1 migration from breaking the whole Draft list.
+        const columnsResult = await env.DB.prepare("PRAGMA table_info(admin_drafts)").all();
+        const columns = new Set((columnsResult.results ?? []).map((column) => column.name));
+        const hasMetadata = ["seo_title", "seo_description", "category", "tags", "featured_image", "featured_image_alt"]
+          .every((column) => columns.has(column));
+        const fields = hasMetadata
+          ? "seo_title, seo_description, category, tags, featured_image_alt"
+          : "'' AS seo_title, '' AS seo_description, 'Happy Life' AS category, '[]' AS tags, '' AS featured_image_alt";
         const result = await env.DB.prepare(
-          "SELECT id, title, slug, summary, seo_title, seo_description, category, tags, featured_image_alt, status, created_at, updated_at FROM admin_drafts ORDER BY updated_at DESC LIMIT 100"
+          `SELECT id, title, slug, summary, ${fields}, status, created_at, updated_at FROM admin_drafts ORDER BY updated_at DESC LIMIT 100`
         ).all();
-        return json({ drafts: result.results ?? [] }, 200, cors);
+        return json({ drafts: result.results ?? [], capabilities: { metadata: hasMetadata, imageStorage: "inline-draft-only", publishing: false, analytics: analyticsConfigured(env) } }, 200, cors);
       }
       if (url.pathname === "/api/drafts" && request.method === "POST") {
         const body = await readJsonBody(request);
@@ -269,6 +372,7 @@ export default {
           if (String(error?.message || error).toLowerCase().includes("unique")) {
             return json({ error: "This slug is already in use." }, 409, cors);
           }
+          if (isMissingColumnError(error)) return json({ error: "Admin metadata migration is missing. Apply migrations/0002_admin_editor_metadata.sql to the dedicated Admin D1 database before saving metadata fields." }, 503, cors);
           return safeError();
         }
         return json({ id, status: "draft", created_at: now, updated_at: now }, 201, cors);
@@ -290,10 +394,18 @@ export default {
         return json({ id: match[1], deleted: true }, 200, cors);
       }
       if (match && request.method === "GET") {
-        const draft = await env.DB.prepare(
-          "SELECT id, title, slug, summary, body_html, seo_title, seo_description, category, tags, featured_image, featured_image_alt, status, created_at, updated_at FROM admin_drafts WHERE id = ?"
-        ).bind(match[1]).first();
-        return draft ? json({ draft }, 200, cors) : json({ error: "Draft not found." }, 404, cors);
+        try {
+          const draft = await env.DB.prepare(
+            "SELECT id, title, slug, summary, body_html, seo_title, seo_description, category, tags, featured_image, featured_image_alt, status, created_at, updated_at FROM admin_drafts WHERE id = ?"
+          ).bind(match[1]).first();
+          if (!draft) return json({ error: "Draft not found." }, 404, cors);
+          let tags = [];
+          try { tags = Array.isArray(draft.tags) ? draft.tags : JSON.parse(draft.tags || "[]"); } catch {}
+          return json({ draft: { ...draft, tags } }, 200, cors);
+        } catch (error) {
+          if (isMissingColumnError(error)) return json({ error: "Admin metadata migration is missing. Apply migrations/0002_admin_editor_metadata.sql to the dedicated Admin D1 database before editing metadata fields." }, 503, cors);
+          return safeError();
+        }
       }
       if (match && request.method === "PUT") {
         const body = await readJsonBody(request);
@@ -310,6 +422,7 @@ export default {
           if (String(error?.message || error).toLowerCase().includes("unique")) {
             return json({ error: "This slug is already in use." }, 409, cors);
           }
+          if (isMissingColumnError(error)) return json({ error: "Admin metadata migration is missing. Apply migrations/0002_admin_editor_metadata.sql to the dedicated Admin D1 database before saving metadata fields." }, 503, cors);
           return safeError();
         }
         return json({ id: match[1], status: "draft", updated_at: now }, 200, cors);

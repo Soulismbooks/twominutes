@@ -1,7 +1,7 @@
 const API_BASE = ""; // Same protected hostname; /api/* must be routed to the separate Admin API Worker.
 const ADMIN_EMAIL = "shashank77a@gmail.com";
 const $ = (id) => document.getElementById(id);
-const state = { drafts: [], currentId: null, timer: null, saving: false, dirty: false, lastSaved: null };
+const state = { drafts: [], currentId: null, timer: null, saving: false, dirty: false, lastSaved: null, analyticsLoading: false };
 const pageNames = { dashboard: "Dashboard", drafts: "Drafts", editor: "लेख Editor", analytics: "Analytics" };
 
 
@@ -28,6 +28,7 @@ function sanitizeRichHtml(input) {
         safe.setAttribute("href", href);
         safe.setAttribute("rel", "noopener noreferrer");
         safe.setAttribute("target", "_blank");
+        if (node.classList.contains("article-button")) safe.setAttribute("class", "article-button");
       }
     }
     node.childNodes.forEach((child) => safe.append(clean(child)));
@@ -65,6 +66,7 @@ function showPage(page) {
   $("page-title").textContent = pageNames[page] || page;
   hideMessage();
   if (page === "drafts" || page === "dashboard") refreshDrafts();
+  if (page === "analytics") refreshAnalytics();
 }
 document.querySelectorAll(".nav-link").forEach((button) => button.addEventListener("click", () => showPage(button.dataset.page)));
 document.querySelectorAll("[data-page]").forEach((button) => {
@@ -89,6 +91,23 @@ async function api(path, options = {}) {
   if (response.status === 403) throw new Error("इस खाते को Admin Portal की अनुमति नहीं है।");
   if (!response.ok) throw new Error(data.error || `Request असफल (HTTP ${response.status})`);
   return data;
+}
+function renderCapabilities(capabilities = {}) {
+  const metadataReady = capabilities.metadata !== false;
+  const imageMode = capabilities.imageStorage || "inline-draft-only";
+  state.metadataReady = metadataReady;
+  $("featured-image-storage-note").textContent = imageMode === "r2"
+    ? "इमेज सुरक्षित media storage में रखी जाती है।"
+    : "R2 enable नहीं है: image अभी draft के अंदर सीमित आकार में सेव होती है; यह स्थायी media library नहीं है।";
+  $("save-button").disabled = !metadataReady;
+  $("review-button").disabled = !metadataReady;
+  if (!metadataReady) {
+    $("metadata-warning").classList.remove("hidden");
+    $("metadata-warning").textContent = "Admin D1 में editor metadata migration लागू नहीं है। अभी SEO/Category/Tags या featured image वाले Draft को सेव न करें; backend सुरक्षित रूप से रोक देगा।";
+  } else {
+    $("metadata-warning").classList.add("hidden");
+    $("metadata-warning").textContent = "";
+  }
 }
 
 function dateLabel(value) {
@@ -170,12 +189,14 @@ async function refreshDrafts() {
     const data = await api("/api/drafts");
     if (!Array.isArray(data.drafts)) throw new Error("Draft API का response सही नहीं है।");
     state.drafts = data.drafts;
+    renderCapabilities(data.capabilities);
     $("identity-status").textContent = ADMIN_EMAIL;
     renderDrafts();
   } catch (error) {
     $("identity-status").textContent = "Access verification आवश्यक";
     const message = error instanceof Error ? error.message : "Drafts लोड नहीं हो सके।";
     showMessage(message);
+    renderCapabilities({metadata:false});
     if (!state.drafts.length) {
       $("recent-drafts").replaceChildren(emptyState("Drafts लोड नहीं हुए", "Access और Admin API की configuration जाँचें।"));
       $("all-drafts").replaceChildren(emptyState("Drafts उपलब्ध नहीं", "लॉगिन और backend उपलब्ध होने पर फिर प्रयास करें।"));
@@ -287,6 +308,39 @@ function insertHtmlAtCaret(html) {
   $("draft-body").value = $("block-editor").innerHTML;
   markDirty();
 }
+function syncEditorFromBody() {
+  $("block-editor").innerHTML = sanitizeRichHtml($("draft-body").value || "<p><br></p>");
+  $("body-length").textContent = `${$("block-editor").innerText.length.toLocaleString()} characters`;
+}
+function addEditorCommand(label, command, value = null) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "button secondary";
+  button.textContent = label;
+  button.addEventListener("click", () => {
+    $("block-editor").focus();
+    document.execCommand(command, false, value);
+    $("draft-body").value = sanitizeRichHtml($("block-editor").innerHTML);
+    $("block-editor").innerHTML = $("draft-body").value;
+    markDirty();
+  });
+  $("block-toolbar-extra").append(button);
+}
+function initializeExtraEditorBlocks() {
+  addEditorCommand("Numbered list", "insertOrderedList");
+  addEditorCommand("Italic", "italic");
+  addEditorCommand("Underline", "underline");
+  addEditorCommand("Code", "formatBlock", "pre");
+  const undo = document.createElement("button");
+  undo.type = "button"; undo.className = "button secondary"; undo.textContent = "Undo";
+  undo.addEventListener("click", () => { $("block-editor").focus(); document.execCommand("undo"); $("draft-body").value=sanitizeRichHtml($("block-editor").innerHTML); markDirty(); });
+  const redo = document.createElement("button");
+  redo.type = "button"; redo.className = "button secondary"; redo.textContent = "Redo";
+  redo.addEventListener("click", () => { $("block-editor").focus(); document.execCommand("redo"); $("draft-body").value=sanitizeRichHtml($("block-editor").innerHTML); markDirty(); });
+  $("block-toolbar-extra").append(undo, redo);
+  $("draft-body").addEventListener("input", syncEditorFromBody);
+}
+initializeExtraEditorBlocks();
 async function imageAsDataUrl(file) {
   if (!file || !/^image\/(jpeg|png|webp)$/.test(file.type)) throw new Error("कृपया JPEG, PNG या WebP इमेज चुनें।");
   if (file.size > 12 * 1024 * 1024) throw new Error("मूल इमेज 12 MB से छोटी होनी चाहिए।");
@@ -314,6 +368,20 @@ async function imageAsDataUrl(file) {
     URL.revokeObjectURL(objectUrl);
   }
 }
+$("insert-link-button").addEventListener("click", () => {
+  const label = window.prompt("लिंक या Button पर दिखने वाला टेक्स्ट लिखें:");
+  if (!label || !label.trim()) return;
+  const entered = window.prompt("पूरा HTTPS URL दर्ज करें:");
+  if (!entered) return;
+  let url;
+  try { url = new URL(entered.trim()); } catch { showMessage("कृपया सही HTTPS URL दर्ज करें।"); return; }
+  if (url.protocol !== "https:") { showMessage("सुरक्षा के लिए केवल HTTPS लिंक स्वीकार हैं।"); return; }
+  const isButton = window.confirm("क्या इसे Button की तरह दिखाना है? OK = Button, Cancel = सामान्य लिंक");
+  const safeLabel = escapeHtml(label.trim().slice(0, 120));
+  const safeUrl = escapeHtml(url.href);
+  insertHtmlAtCaret(`<a href="${safeUrl}"${isButton ? ' class="article-button"' : ""} target="_blank" rel="noopener noreferrer">${safeLabel}</a>`);
+  showMessage(isButton ? "Button block जोड़ दिया गया।" : "लिंक जोड़ दिया गया।", "success");
+});
 $("insert-image-button").addEventListener("click", () => $("draft-inline-image").click());
 $("draft-inline-image").addEventListener("change", async (event) => {
   const file = event.target.files?.[0];
@@ -339,7 +407,7 @@ $("draft-featured-image").addEventListener("change", async (event) => {
     $("featured-image-status").textContent = `Featured image तैयार · ${Math.round(data.length / 1024)} KB encoded`;
     if (!$("draft-featured-alt").value.trim()) $("draft-featured-alt").value = file.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ");
     markDirty();
-    showMessage("Featured image draft में जोड़ दी गई है।", "success");
+    showMessage("Featured image draft में जोड़ी गई है; वर्तमान में यह permanent R2 media storage नहीं है।", "success");
   } catch (error) {
     showMessage(error instanceof Error ? error.message : "Featured image जोड़ नहीं पाए।");
   } finally {
@@ -348,6 +416,11 @@ $("draft-featured-image").addEventListener("change", async (event) => {
 });
 
 async function saveDraft({ automatic = false } = {}) {
+  if (state.metadataReady === false) {
+    if (!automatic) showMessage("Admin D1 metadata migration अधूरी है; इस समय Draft save नहीं किया गया।", "error");
+    setSaveState("Metadata migration आवश्यक", "error");
+    return;
+  }
   if (state.saving) { state.dirty = true; return; }
   const data = formData();
   if (!data.title.trim() || !data.slug.trim()) {
@@ -395,7 +468,7 @@ function buildPreviewDocument() {
   const content = $("draft-body").value || "<p>No content yet.</p>";
   const csp = "default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'none'; font-src data:; form-action 'none'; base-uri 'none'";
   // The iframe is sandboxed without allow-same-origin; untrusted code cannot access the admin DOM or origin.
-  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title><style>body{font:16px/1.65 system-ui,sans-serif;padding:1rem;max-width:820px;margin:auto;color:#25392b;overflow-wrap:anywhere}img{max-width:100%;height:auto}pre,code{white-space:pre-wrap;overflow-wrap:anywhere}a{color:#176b40}</style></head><body><h1>${escapeHtml(title)}</h1>${content}</body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title><style>body{font:16px/1.65 system-ui,sans-serif;padding:1rem;max-width:820px;margin:auto;color:#25392b;overflow-wrap:anywhere}img{max-width:100%;height:auto}pre,code{white-space:pre-wrap;overflow-wrap:anywhere}a{color:#176b40}.article-button{display:inline-block;background:#176b40;color:#fff;padding:.7rem 1rem;border-radius:.6rem;text-decoration:none;font-weight:700;margin:.4rem 0}</style></head><body><h1>${escapeHtml(title)}</h1>${content}</body></html>`;
 }
 $("preview-button").addEventListener("click", () => {
   $("preview-frame").srcdoc = buildPreviewDocument();
@@ -413,6 +486,87 @@ window.addEventListener("beforeunload", (event) => {
     event.returnValue = "";
   }
 });
+
+
+function metricNumber(value) {
+  return Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
+}
+function metricBytes(value) {
+  const n = Number(value || 0);
+  if (!Number.isFinite(n) || n <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.min(Math.floor(Math.log(n) / Math.log(1024)), units.length - 1);
+  return (n / Math.pow(1024, i)).toLocaleString("en-IN", { maximumFractionDigits: 1 }) + " " + units[i];
+}
+function renderAnalyticsRows(id, rows, getTitle, getDetail) {
+  const list = $(id);
+  list.replaceChildren();
+  if (!rows.length) {
+    list.append(emptyState("इस अवधि में कोई डेटा नहीं", "Cloudflare ने इस समयावधि के लिए कोई matching traffic record नहीं दिया।"));
+    return;
+  }
+  rows.forEach((row) => {
+    const item = document.createElement("article");
+    item.className = "analytics-row";
+    const title = document.createElement("strong");
+    title.textContent = getTitle(row);
+    const detail = document.createElement("span");
+    detail.textContent = getDetail(row);
+    item.append(title, detail);
+    list.append(item);
+  });
+}
+async function refreshAnalytics() {
+  if (state.analyticsLoading) return;
+  state.analyticsLoading = true;
+  const button = $("analytics-refresh");
+  const status = $("analytics-status");
+  const error = $("analytics-error");
+  const results = $("analytics-results");
+  const empty = $("analytics-empty");
+  button.disabled = true;
+  button.textContent = "लोड हो रहा है…";
+  status.textContent = "Cloudflare से डेटा माँगा जा रहा है";
+  error.classList.add("hidden");
+  results.classList.add("hidden");
+  empty.classList.remove("hidden");
+  try {
+    const days = $("analytics-days").value;
+    const data = await api("/api/analytics?days=" + encodeURIComponent(days));
+    if (!data || !data.metrics || !Array.isArray(data.topPaths) || !Array.isArray(data.trend)) {
+      throw new Error("Analytics API का response मान्य नहीं है।");
+    }
+    $("analytics-requests").textContent = metricNumber(data.metrics.requests);
+    $("analytics-visits").textContent = metricNumber(data.metrics.visits);
+    $("analytics-bytes").textContent = metricBytes(data.metrics.dataTransferBytes);
+    $("analytics-attribution").textContent = "Source: " + data.source + " · Host: " + data.host + " · " +
+      new Date(data.period.start).toLocaleString("hi-IN") + " से " +
+      new Date(data.period.end).toLocaleString("hi-IN") +
+      ". Requests और visits Cloudflare के zone HTTP metrics हैं; ये unique visitors या page-view counter नहीं हैं।";
+    renderAnalyticsRows("analytics-top-paths", data.topPaths,
+      (row) => row.path,
+      (row) => metricNumber(row.requests) + " requests · " + metricNumber(row.visits) + " visits · " + metricBytes(row.dataTransferBytes));
+    renderAnalyticsRows("analytics-daily", data.trend,
+      (row) => row.date,
+      (row) => metricNumber(row.requests) + " requests · " + metricNumber(row.visits) + " visits");
+    results.classList.remove("hidden");
+    empty.classList.add("hidden");
+    status.textContent = "वास्तविक डेटा · " + days + " दिन";
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Analytics लोड नहीं हो सका।";
+    error.textContent = message;
+    error.classList.remove("hidden");
+    status.textContent = "डेटा उपलब्ध नहीं";
+    empty.querySelector("strong").textContent = "Analytics अभी उपलब्ध नहीं हैं";
+    empty.querySelector("p").textContent = message;
+  } finally {
+    button.disabled = false;
+    button.textContent = "डेटा फिर लोड करें";
+    state.analyticsLoading = false;
+  }
+}
+$("analytics-refresh").addEventListener("click", refreshAnalytics);
+$("analytics-days").addEventListener("change", refreshAnalytics);
 
 // Read from the protected API at startup. There are no demo rows or guessed metrics.
 refreshDrafts();

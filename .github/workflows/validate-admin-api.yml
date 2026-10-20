@@ -2,7 +2,7 @@ name: Validate admin API foundation
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, admin-auth-draft-save-foundation]
     paths:
       - "admin-api/**"
       - "admin-ui/**"
@@ -45,9 +45,14 @@ jobs:
           assert 'srcdoc = buildPreviewDocument()' in js
           assert 'img-src data: blob:;' in js
           assert 'img-src data: blob: https:' not in js
-          assert 'id="block-editor"' in html and 'id="draft-seo-title"' in html
+          assert 'id="block-editor"' in html and 'id="insert-link-button"' in html and 'id="draft-seo-title"' in html
+          assert 'id="metadata-warning"' in html and 'id="block-toolbar-extra"' in html
+          assert 'function initializeExtraEditorBlocks' in js
+          assert '"Numbered list"' in js and '"Undo"' in js and '"Redo"' in js
+          assert 'state.metadataReady === false' in js
+          assert 'metadata-warning' in worker and 'Numbered list' in worker
           assert 'id="draft-featured-image"' in html and 'id="draft-category"' in html
-          assert 'block-editor' in js and 'insertHtmlAtCaret' in js
+          assert 'block-editor' in js and 'insertHtmlAtCaret' in js and 'insert-link-button' in js and 'article-button' in js
           assert 'async function deleteDraft' in js
           assert 'sanitizeRichHtml' in js
           assert 'request.method === "DELETE"' in Path("admin-api/src/index.js").read_text(encoding="utf-8")
@@ -55,6 +60,30 @@ jobs:
           assert '"workers_dev": false' in config
           assert '"routes"' not in config
           print("Admin UI wiring, embedded asset sync, and route safety checks passed.")
+          PY
+      - name: Verify draft capability gating and D1 schema health
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          api = Path("admin-api/src/index.js").read_text(encoding="utf-8")
+          test = Path("admin-api/test/security.test.js").read_text(encoding="utf-8")
+          ui = Path("admin-ui/public/app.js").read_text(encoding="utf-8")
+          html = Path("admin-ui/public/index.html").read_text(encoding="utf-8")
+          assert 'PRAGMA table_info(admin_drafts)' in api
+          assert 'missingMetadataColumns' in api
+          assert 'draft list falls back cleanly when metadata migration is not installed' in test
+          assert 'sql.includes' in test and 'AS seo_title' in test
+          assert 'renderCapabilities(data.capabilities)' in ui
+          assert 'metadata !== false' in ui
+          assert 'featured-image-storage-note' in html
+          assert 'url.pathname === "/api/analytics"' in api
+          assert 'function loadZoneAnalytics' in api and 'CLOUDFLARE_ANALYTICS_TOKEN' in api
+          assert 'analytics API requires valid Access identity' in test
+          assert 'refreshAnalytics()' in ui and 'analytics-top-paths' in html
+          config = Path("admin-api/wrangler.jsonc").read_text(encoding="utf-8")
+          assert '"ANALYTICS_ZONE_TAG"' in config and '"ANALYTICS_HOST"' in config
+          assert 'CLOUDFLARE_ANALYTICS_TOKEN' not in config
+          print("Schema health, migration fallback, and UI capability gating checks passed.")
           PY
       - name: Validate draft migration and constraints
         run: |

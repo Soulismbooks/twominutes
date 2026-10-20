@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { webcrypto } from "node:crypto";
 import {
   normalizeTeamDomain, safeSlug, parseDraft, hasValidClaims, verifyAccessJwt, readJsonBody, originAllowed,
+  analyticsConfigured, loadZoneAnalytics,
 } from "../src/index.js";
 
 const DOMAIN = "nameless-band-cb69.cloudflareaccess.com";
@@ -268,4 +269,250 @@ test("authorized DELETE removes only the selected draft", async () => {
   assert.equal(response.status, 200);
   assert.equal(removed.length, 1);
   assert.match(removed[0].sql, /DELETE FROM admin_drafts WHERE id = \?/);
+});
+
+
+test("health route reports absent editor metadata columns without writing to D1", async () => {
+  const team = "schema-health-test.cloudflareaccess.com";
+  const signed = await makeJwt({ iss: `https://${team}` });
+  globalThis.fetch = async () => new Response(JSON.stringify({ keys: [signed.jwk] }), {
+    status: 200, headers: { "content-type": "application/json", "cache-control": "max-age=30" },
+  });
+  const queries = [];
+  const env = {
+    ACCESS_TEAM_DOMAIN: team, ACCESS_AUD: AUD, ADMIN_EMAIL: ADMIN,
+    ADMIN_ORIGIN: "https://admin.example.com",
+    DB: { prepare(sql) { queries.push(sql); return { async all() { return { results: [
+      {name:"id"},{name:"title"},{name:"slug"},{name:"summary"},{name:"body_html"},
+      {name:"status"},{name:"created_at"},{name:"updated_at"}
+    ] }; } }; } }
+  };
+  const { default: worker } = await import("../src/index.js");
+  const response = await worker.fetch(new Request("https://api.example.com/api/health", {
+    headers: { "Cf-Access-Jwt-Assertion": signed.token },
+  }), env);
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.ok, true);
+  assert.equal(body.schema.core, true);
+  assert.equal(body.schema.metadata, false);
+  assert.deepEqual(body.schema.missingMetadataColumns, ["seo_title","seo_description","category","tags","featured_image","featured_image_alt"]);
+  assert.ok(queries.every((sql) => /^PRAGMA table_info\(admin_drafts\)$/i.test(sql)));
+});
+
+test("draft list falls back cleanly when metadata migration is not installed", async () => {
+  const team = "schema-fallback-test.cloudflareaccess.com";
+  const signed = await makeJwt({ iss: `https://${team}` });
+  globalThis.fetch = async () => new Response(JSON.stringify({ keys: [signed.jwk] }), {
+    status: 200, headers: { "content-type": "application/json", "cache-control": "max-age=30" },
+  });
+  const queries = [];
+  const env = {
+    ACCESS_TEAM_DOMAIN: team, ACCESS_AUD: AUD, ADMIN_EMAIL: ADMIN,
+    ADMIN_ORIGIN: "https://admin.example.com",
+    DB: { prepare(sql) {
+      queries.push(sql);
+      return {
+        async all() {
+          if (/PRAGMA table_info/i.test(sql)) return {results:[
+            {name:"id"},{name:"title"},{name:"slug"},{name:"summary"},{name:"body_html"},
+            {name:"status"},{name:"created_at"},{name:"updated_at"}
+          ]};
+          return {results:[{id:"draft-1",title:"Test",slug:"test",category:"Happy Life",status:"draft"}]};
+        }
+      };
+    } }
+  };
+  const { default: worker } = await import("../src/index.js");
+  const response = await worker.fetch(new Request("https://api.example.com/api/drafts", {
+    headers: { "Cf-Access-Jwt-Assertion": signed.token },
+  }), env);
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.capabilities.metadata, false);
+  assert.equal(body.capabilities.publishing, false);
+  assert.equal(body.drafts[0].category, "Happy Life");
+  assert.ok(queries.some((sql) => sql.includes("'' AS seo_title")));
+  assert.ok(queries.some((sql) => /'' AS seo_title/.test(sql)));
+});
+
+
+test("GET draft returns actionable migration error instead of opaque 500", async () => {
+  const team = "missing-column-get.cloudflareaccess.com";
+  const signed = await makeJwt({ iss: `https://${team}` });
+  globalThis.fetch = async () => new Response(JSON.stringify({ keys: [signed.jwk] }), {
+    status: 200, headers: { "content-type": "application/json", "cache-control": "max-age=30" },
+  });
+  const env = {
+    ACCESS_TEAM_DOMAIN: team, ACCESS_AUD: AUD, ADMIN_EMAIL: ADMIN,
+    ADMIN_ORIGIN: "https://admin.example.com",
+    DB: { prepare() { return { bind() { return { async first() { throw new Error("no such column: seo_title"); } }; } }; } }
+  };
+  const { default: worker } = await import("../src/index.js");
+  const response = await worker.fetch(new Request("https://api.example.com/api/drafts/12345678-1234-1234-1234-123456789abc", {
+    headers: { "Cf-Access-Jwt-Assertion": signed.token },
+  }), env);
+  const body = await response.json();
+  assert.equal(response.status, 503);
+  assert.match(body.error, /0002_admin_editor_metadata.sql/);
+});
+
+test("PUT draft reports migration mismatch and does not disclose SQL internals", async () => {
+  const team = "missing-column-put.cloudflareaccess.com";
+  const signed = await makeJwt({ iss: `https://${team}` });
+  globalThis.fetch = async () => new Response(JSON.stringify({ keys: [signed.jwk] }), {
+    status: 200, headers: { "content-type": "application/json", "cache-control": "max-age=30" },
+  });
+  const env = {
+    ACCESS_TEAM_DOMAIN: team, ACCESS_AUD: AUD, ADMIN_EMAIL: ADMIN,
+    ADMIN_ORIGIN: "https://admin.example.com",
+    DB: { prepare() { return { bind() { return { async run() { throw new Error("table admin_drafts has no column named seo_title"); } }; } }; } }
+  };
+  const { default: worker } = await import("../src/index.js");
+  const response = await worker.fetch(new Request("https://api.example.com/api/drafts/12345678-1234-1234-1234-123456789abc", {
+    method:"PUT",
+    headers: { Origin: env.ADMIN_ORIGIN, "Cf-Access-Jwt-Assertion": signed.token, "Content-Type":"application/json" },
+    body:JSON.stringify({title:"Test",slug:"test",summary:"",body_html:"",seo_title:"Title"})
+  }), env);
+  const body = await response.text();
+  assert.equal(response.status, 503);
+  assert.match(body, /0002_admin_editor_metadata.sql/);
+  assert.doesNotMatch(body, /table admin_drafts has no column/i);
+});
+
+
+test("analytics stays disabled until a secret token and valid site settings exist", async () => {
+  let called = false;
+  const result = await loadZoneAnalytics({ ANALYTICS_ZONE_TAG: "e194bf4106df6b8ab59cedee29b1582c", ANALYTICS_HOST: "www.twominutes.in" }, 7, async () => {
+    called = true;
+    throw new Error("Network must not be called without a token");
+  });
+  assert.equal(analyticsConfigured({ CLOUDFLARE_ANALYTICS_TOKEN: "token-long-enough-to-test", ANALYTICS_ZONE_TAG: "e194bf4106df6b8ab59cedee29b1582c", ANALYTICS_HOST: "www.twominutes.in" }), true);
+  assert.equal(analyticsConfigured({ CLOUDFLARE_ANALYTICS_TOKEN: "", ANALYTICS_ZONE_TAG: "e194bf4106df6b8ab59cedee29b1582c", ANALYTICS_HOST: "www.twominutes.in" }), false);
+  assert.ok(result.error.includes("not configured"));
+  assert.equal(called, false);
+});
+
+test("analytics returns real GraphQL request, visit, bandwidth and path values", async () => {
+  const env = {
+    CLOUDFLARE_ANALYTICS_TOKEN: "test-token-that-is-never-returned",
+    ANALYTICS_ZONE_TAG: "e194bf4106df6b8ab59cedee29b1582c",
+    ANALYTICS_HOST: "www.twominutes.in"
+  };
+  let captured;
+  const responseData = {
+    data: { viewer: { zones: [{
+      aggregate: [{count: 432, sum: {visits: 91, edgeResponseBytes: 102400}}],
+      daily: [
+        {count: 120, sum: {visits: 25, edgeResponseBytes: 25000}, dimensions: {datetimeDay: "2026-10-19"}},
+        {count: 312, sum: {visits: 66, edgeResponseBytes: 77400}, dimensions: {datetimeDay: "2026-10-20"}}
+      ],
+      topPaths: [
+        {count: 77, sum: {visits: 20, edgeResponseBytes: 16000}, dimensions: {clientRequestPath: "/2026/10/example.html"}}
+      ]
+    }]}}
+  };
+  const result = await loadZoneAnalytics(env, 7, async (url, options) => {
+    captured = {url, options, body: JSON.parse(options.body)};
+    return {ok: true, json: async () => responseData};
+  });
+  assert.equal(result.source, "Cloudflare GraphQL HTTP analytics");
+  assert.equal(result.host, "www.twominutes.in");
+  assert.equal(result.metrics.requests, 432);
+  assert.equal(result.metrics.visits, 91);
+  assert.equal(result.metrics.dataTransferBytes, 102400);
+  assert.equal(result.topPaths[0].path, "/2026/10/example.html");
+  assert.equal(result.topPaths[0].requests, 77);
+  assert.equal(captured.url, "https://api.cloudflare.com/client/v4/graphql");
+  assert.equal(captured.options.headers.authorization, "Bearer test-token-that-is-never-returned");
+  assert.equal(captured.body.variables.zoneTag, env.ANALYTICS_ZONE_TAG);
+  assert.equal(captured.body.variables.filter.clientRequestHTTPHost, "www.twominutes.in");
+  assert.equal(captured.body.variables.filter.requestSource, "eyeball");
+  assert.equal(result.period.days, 7);
+  assert.doesNotHaveProperty(result, "token");
+});
+
+test("analytics rejects unsupported ranges and hides provider errors", async () => {
+  const env = {
+    CLOUDFLARE_ANALYTICS_TOKEN: "test-token-that-is-never-returned",
+    ANALYTICS_ZONE_TAG: "e194bf4106df6b8ab59cedee29b1582c",
+    ANALYTICS_HOST: "www.twominutes.in"
+  };
+  const invalidRange = await loadZoneAnalytics(env, 9, async () => {
+    throw new Error("must not execute invalid range");
+  });
+  assert.ok(invalidRange.error.includes("days=1, 7 or 30"));
+  const providerFailure = await loadZoneAnalytics(env, 1, async () => ({
+    ok: true, json: async () => ({ errors: [{message:"private provider detail"}] })
+  }));
+  assert.ok(providerFailure.error.includes("Cloudflare Analytics returned an error"));
+  assert.doesNotMatch(providerFailure.error, /private provider detail|test-token/);
+});
+
+
+test("analytics API requires valid Access identity and returns 503 while secret is absent", async () => {
+  const team = "analytics-disabled-test.cloudflareaccess.com";
+  const signed = await makeJwt({ iss: `https://${team}` });
+  let graphqlCalled = false;
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/cdn-cgi/access/certs")) {
+      return new Response(JSON.stringify({keys:[signed.jwk]}), {status:200, headers:{"content-type":"application/json","cache-control":"max-age=30"}});
+    }
+    graphqlCalled = true;
+    throw new Error("GraphQL must not be called with no token");
+  };
+  const env = {
+    ACCESS_TEAM_DOMAIN:team, ACCESS_AUD:AUD, ADMIN_EMAIL:ADMIN,
+    ADMIN_ORIGIN:"https://admin.example.com",
+    ANALYTICS_ZONE_TAG:"e194bf4106df6b8ab59cedee29b1582c",
+    ANALYTICS_HOST:"www.twominutes.in",
+    DB:{prepare(){throw new Error("Analytics route must not touch D1");}}
+  };
+  const {default:worker}=await import("../src/index.js");
+  const response=await worker.fetch(new Request("https://api.example.com/api/analytics?days=7",{
+    headers:{"Cf-Access-Jwt-Assertion":signed.token}
+  }),env);
+  const body=await response.json();
+  assert.equal(response.status,503);
+  assert.match(body.error,/CLOUDFLARE_ANALYTICS_TOKEN/);
+  assert.equal(graphqlCalled,false);
+});
+
+test("analytics API returns only configured host metrics after Access validation", async () => {
+  const team = "analytics-enabled-test.cloudflareaccess.com";
+  const signed = await makeJwt({ iss: `https://${team}` });
+  let graphqlBody;
+  globalThis.fetch = async (url, options={}) => {
+    if (String(url).includes("/cdn-cgi/access/certs")) {
+      return new Response(JSON.stringify({keys:[signed.jwk]}), {status:200, headers:{"content-type":"application/json","cache-control":"max-age=30"}});
+    }
+    assert.equal(String(url),"https://api.cloudflare.com/client/v4/graphql");
+    assert.equal(options.headers.authorization,"Bearer analytics-token-for-unit-test");
+    graphqlBody=JSON.parse(options.body);
+    return new Response(JSON.stringify({data:{viewer:{zones:[{
+      aggregate:[{count:21,sum:{visits:5,edgeResponseBytes:9900}}],
+      daily:[{count:21,sum:{visits:5,edgeResponseBytes:9900},dimensions:{datetimeDay:"2026-10-20"}}],
+      topPaths:[{count:12,sum:{visits:4,edgeResponseBytes:4000},dimensions:{clientRequestPath:"/happy-life.html"}}]
+    }]}}}), {status:200,headers:{"content-type":"application/json"}});
+  };
+  const env = {
+    ACCESS_TEAM_DOMAIN:team, ACCESS_AUD:AUD, ADMIN_EMAIL:ADMIN,
+    ADMIN_ORIGIN:"https://admin.example.com",
+    CLOUDFLARE_ANALYTICS_TOKEN:"analytics-token-for-unit-test",
+    ANALYTICS_ZONE_TAG:"e194bf4106df6b8ab59cedee29b1582c",
+    ANALYTICS_HOST:"www.twominutes.in",
+    DB:{prepare(){throw new Error("Analytics route must not touch D1");}}
+  };
+  const {default:worker}=await import("../src/index.js");
+  const response=await worker.fetch(new Request("https://api.example.com/api/analytics?days=7",{
+    headers:{"Cf-Access-Jwt-Assertion":signed.token}
+  }),env);
+  const body=await response.json();
+  assert.equal(response.status,200);
+  assert.equal(body.metrics.requests,21);
+  assert.equal(body.metrics.visits,5);
+  assert.equal(body.topPaths[0].path,"/happy-life.html");
+  assert.equal(graphqlBody.variables.filter.clientRequestHTTPHost,"www.twominutes.in");
+  assert.equal(graphqlBody.variables.filter.requestSource,"eyeball");
+  assert.doesNotHaveProperty(body,"token");
 });
