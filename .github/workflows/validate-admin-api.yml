@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "admin-api/**"
+      - "admin-ui/**"
       - "migrations/**"
       - ".github/workflows/validate-admin-api.yml"
 
@@ -38,8 +39,9 @@ jobs:
           config = Path("admin-ui/wrangler.jsonc").read_text(encoding="utf-8")
           assert 'href="/styles.css"' in html and 'src="/app.js"' in html
           assert '"/api/drafts"' in js
-          assert 'sandbox="allow-scripts"' in js
-          assert "allow-same-origin" not in js
+          assert 'sandbox="allow-scripts"' in html
+          assert 'sandbox="allow-same-origin"' not in html
+          assert 'iframe.setAttribute("sandbox", "allow-scripts")' in js
           assert '"workers_dev": false' in config
           assert '"routes"' not in config
           print("Admin UI wiring and route safety checks passed.")
