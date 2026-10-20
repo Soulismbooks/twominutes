@@ -320,8 +320,23 @@ export default {
         if (declared > MAX_IMAGE_BYTES) return json({ error: "Image must be 5 MB or smaller." }, 413, cors);
         if (!request.body) return json({ error: "Image data is required." }, 400, cors);
         try {
-          const bytes = await request.arrayBuffer();
-          if (!bytes.byteLength || bytes.byteLength > MAX_IMAGE_BYTES) return json({ error: "Image must be between 1 byte and 5 MB." }, 413, cors);
+          const reader = request.body.getReader();
+          const chunks = [];
+          let size = 0;
+          while (true) {
+            const part = await reader.read();
+            if (part.done) break;
+            size += part.value.byteLength;
+            if (size > MAX_IMAGE_BYTES) {
+              await reader.cancel();
+              return json({ error: "Image must be 5 MB or smaller." }, 413, cors);
+            }
+            chunks.push(part.value);
+          }
+          if (!size) return json({ error: "Image data is empty." }, 400, cors);
+          const bytes = new Uint8Array(size);
+          let offset = 0;
+          for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
           const ext = ({ "image/jpeg":"jpg", "image/png":"png", "image/webp":"webp", "image/gif":"gif", "image/avif":"avif" })[type];
           const key = "posts/" + crypto.randomUUID() + "." + ext;
           await env.MEDIA.put(key, bytes, { httpMetadata: { contentType: type, cacheControl: "public, max-age=31536000, immutable" }, customMetadata: { uploadedBy: env.ADMIN_EMAIL } });
