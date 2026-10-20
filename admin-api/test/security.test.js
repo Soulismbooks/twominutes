@@ -232,3 +232,18 @@ test("missing runtime configuration fails closed at the Worker boundary", async 
   assert.equal(response.status, 503);
   assert.match(await response.text(), /not configured/i);
 });
+
+test("SEO metadata, categories, tags and featured image validation", () => {
+  const data = parseDraft({
+    title: "Happy Life", slug: "happy-life", summary: "Short",
+    body_html: "<p>hello</p>", seo_title: "SEO title", seo_description: "SEO desc",
+    category: "Happy Life", tags: ["happiness", "habits"],
+    featured_image: "data:image/jpeg;base64,/9j/2Q==", featured_image_alt: "A calm sunrise"
+  });
+  assert.equal(data.data.seo_title, "SEO title");
+  assert.deepEqual(data.data.tags, ["happiness", "habits"]);
+  assert.equal(data.data.featured_image_alt, "A calm sunrise");
+  assert.ok(parseDraft({title:"x",slug:"x",category:"Unknown",body_html:""}).error);
+  assert.ok(parseDraft({title:"x",slug:"x",featured_image:"https://evil.example/image.jpg",body_html:""}).error);
+  assert.ok(parseDraft({title:"x",slug:"x",seo_description:"x".repeat(161),body_html:""}).error);
+});
