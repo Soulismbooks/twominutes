@@ -34,6 +34,16 @@ Last checked: 2026-10-20 (UTC)
 - Root `twominutes.in` and `www.twominutes.in` DNS records were not modified by the Admin Portal work.
 - No public Worker or preview URL is enabled for either Admin Worker.
 - Publishing remains disabled. Analytics is not connected and must not display made-up metrics.
+
+## Additional Admin editor features in this PR (not deployed yet)
+
+- Block editor with heading, paragraph, bold, list and quote actions.
+- Inline article image and featured image selection from device; images are resized to JPEG data URLs and embedded in the draft, rather than sent to a public upload endpoint. API validates the encoding and size. This is a small-draft convenience, not a durable media library; R2 is not enabled on the account.
+- SEO title (70 chars), meta description (160 chars), category, tags and featured-image alt text.
+- Review-request state (`ready_for_review`) requires a saved draft and confirmation. It does not publish a post or change the public site.
+- Migration `migrations/0002_admin_editor_metadata.sql` adds metadata columns. Apply it only to the dedicated Admin D1 after review and approval; never to a public-site database.
+- API and UI source plus embedded UI Worker assets must stay synchronized; CI checks this relationship.
+- Actual public publishing, GitHub PR-creation runtime credentials, permanent media storage and live analytics remain future integration work. The review action is not publishing.
 - The custom hostname is routed behind Cloudflare Access. The Admin API independently verifies the signed Access JWT and exact admin email.
 - If the browser test fails, first use Cloudflare Access/Worker logs and read-only checks; do not remove Access policy or open a bypass as a workaround.
 
