@@ -17,5 +17,11 @@
       "persist": true,
       "invocation_logs": true
     }
-  }
+  },
+  "services": [
+    {
+      "binding": "ADMIN_API",
+      "service": "twominutes-admin-api"
+    }
+  ]
 }
