@@ -333,3 +333,47 @@ test("draft list falls back cleanly when metadata migration is not installed", a
   assert.equal(body.drafts[0].category, "Happy Life");
   assert.ok(queries.some((sql) => /'' AS seo_title/.test(sql)));
 });
+
+
+test("GET draft returns actionable migration error instead of opaque 500", async () => {
+  const team = "missing-column-get.cloudflareaccess.com";
+  const signed = await makeJwt({ iss: `https://${team}` });
+  globalThis.fetch = async () => new Response(JSON.stringify({ keys: [signed.jwk] }), {
+    status: 200, headers: { "content-type": "application/json", "cache-control": "max-age=30" },
+  });
+  const env = {
+    ACCESS_TEAM_DOMAIN: team, ACCESS_AUD: AUD, ADMIN_EMAIL: ADMIN,
+    ADMIN_ORIGIN: "https://admin.example.com",
+    DB: { prepare() { return { async first() { throw new Error("no such column: seo_title"); } }; } }
+  };
+  const { default: worker } = await import("../src/index.js");
+  const response = await worker.fetch(new Request("https://api.example.com/api/drafts/12345678-1234-1234-1234-123456789abc", {
+    headers: { "Cf-Access-Jwt-Assertion": signed.token },
+  }), env);
+  const body = await response.json();
+  assert.equal(response.status, 503);
+  assert.match(body.error, /0002_admin_editor_metadata.sql/);
+});
+
+test("PUT draft reports migration mismatch and does not disclose SQL internals", async () => {
+  const team = "missing-column-put.cloudflareaccess.com";
+  const signed = await makeJwt({ iss: `https://${team}` });
+  globalThis.fetch = async () => new Response(JSON.stringify({ keys: [signed.jwk] }), {
+    status: 200, headers: { "content-type": "application/json", "cache-control": "max-age=30" },
+  });
+  const env = {
+    ACCESS_TEAM_DOMAIN: team, ACCESS_AUD: AUD, ADMIN_EMAIL: ADMIN,
+    ADMIN_ORIGIN: "https://admin.example.com",
+    DB: { prepare() { return { bind() { return { async run() { throw new Error("table admin_drafts has no column named seo_title"); } }; } }; } }
+  };
+  const { default: worker } = await import("../src/index.js");
+  const response = await worker.fetch(new Request("https://api.example.com/api/drafts/12345678-1234-1234-1234-123456789abc", {
+    method:"PUT",
+    headers: { Origin: env.ADMIN_ORIGIN, "Cf-Access-Jwt-Assertion": signed.token, "Content-Type":"application/json" },
+    body:JSON.stringify({title:"Test",slug:"test",summary:"",body_html:"",seo_title:"Title"})
+  }), env);
+  const body = await response.text();
+  assert.equal(response.status, 503);
+  assert.match(body, /0002_admin_editor_metadata.sql/);
+  assert.doesNotMatch(body, /table admin_drafts has no column/i);
+});
