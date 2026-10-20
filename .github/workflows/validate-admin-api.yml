@@ -65,15 +65,15 @@ jobs:
           assert required.issubset(columns), f"Missing columns: {required - columns}"
 
           row = ("1", "Example", "example-slug", "", "<p>Draft only</p>", "draft", "2026-10-20T00:00:00Z", "2026-10-20T00:00:00Z")
-          db.execute("INSERT INTO admin_drafts VALUES (?, ?, ?, ?, ?, ?, ?, ?)", row)
+          db.execute("INSERT INTO admin_drafts (id, title, slug, summary, body_html, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", row)
           try:
-              db.execute("INSERT INTO admin_drafts VALUES (?, ?, ?, ?, ?, ?, ?, ?)", ("2", "Duplicate", "example-slug", "", "", "draft", row[6], row[7]))
+              db.execute("INSERT INTO admin_drafts (id, title, slug, summary, body_html, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", ("2", "Duplicate", "example-slug", "", "", "draft", row[6], row[7]))
               raise AssertionError("Duplicate slug was incorrectly accepted")
           except sqlite3.IntegrityError:
               pass
 
           try:
-              db.execute("INSERT INTO admin_drafts VALUES (?, ?, ?, ?, ?, ?, ?, ?)", ("3", "Bad status", "bad-status", "", "", "published", row[6], row[7]))
+              db.execute("INSERT INTO admin_drafts (id, title, slug, summary, body_html, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", ("3", "Bad status", "bad-status", "", "", "published", row[6], row[7]))
               raise AssertionError("Unexpected status was incorrectly accepted")
           except sqlite3.IntegrityError:
               pass
