@@ -1,0 +1,9 @@
+{
+  "name": "twominutes-admin-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "check": "node --check src/index.js"
+  }
+}
