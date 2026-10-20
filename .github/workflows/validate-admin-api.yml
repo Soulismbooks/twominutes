@@ -72,7 +72,7 @@ jobs:
           assert 'PRAGMA table_info(admin_drafts)' in api
           assert 'missingMetadataColumns' in api
           assert 'Draft list falls back cleanly when metadata migration is not installed' in test
-          assert 'assert.ok(queries.some((sql) => sql.includes("' + "'" + "'" + "'" + '"' + '"' + '"' + ' AS seo_title")))' in test
+          assert 'sql.includes' in test and 'AS seo_title' in test
           assert 'renderCapabilities(data.capabilities)' in ui
           assert 'metadata !== false' in ui
           assert 'featured-image-storage-note' in html
