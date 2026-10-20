@@ -77,9 +77,10 @@ test("missing Access configuration fails closed", async () => {
 });
 
 test("exact admin email policy is enforced by route", async () => {
-  const signed = await makeJwt({ email: "someone-else@gmail.com" });
+  const otherDomain = "wrong-email-test.cloudflareaccess.com";
+  const signed = await makeJwt({ email: "someone-else@gmail.com", iss: `https://${otherDomain}` });
   const env = {
-    ACCESS_TEAM_DOMAIN: DOMAIN, ACCESS_AUD: AUD, ADMIN_EMAIL: ADMIN,
+    ACCESS_TEAM_DOMAIN: otherDomain, ACCESS_AUD: AUD, ADMIN_EMAIL: ADMIN,
     ADMIN_ORIGIN: "https://admin.example.com",
     DB: { prepare() { throw new Error("DB must not be used on denied identity"); } },
   };
@@ -109,10 +110,10 @@ test("slug validation and duplicate slug constraint are enforced in isolated SQL
   assert.ok(parseDraft({ title: "", slug: "x", body_html: "" }).error);
 
   // Mirror the migration in an isolated in-memory SQLite DB, not Cloudflare production D1.
-  const { spawnSync } = await import("node:child_process").then(async () => await import("node:child_process"));
+  const { spawnSync } = await import("node:child_process");
   const { readFileSync } = await import("node:fs");
   const { resolve } = await import("node:path");
-  const sql = readFileSync(resolve("migrations/0001_admin_drafts.sql"), "utf8");
+  const sql = readFileSync(resolve("../migrations/0001_admin_drafts.sql"), "utf8");
   const py = [
     "import sqlite3,sys",
     "db=sqlite3.connect(':memory:')",
@@ -139,4 +140,84 @@ test("origin check requires exact configured HTTPS origin", () => {
   assert.equal(originAllowed(new Request("https://api.example.com", { headers: { Origin: env.ADMIN_ORIGIN } }), env), true);
   assert.equal(originAllowed(new Request("https://api.example.com", { headers: { Origin: "https://evil.example.com" } }), env), false);
   assert.equal(originAllowed(new Request("https://api.example.com"), env), false);
+});
+
+
+test("unauthenticated requests cannot list drafts", async () => {
+  const { default: worker } = await import("../admin-api/src/index.js");
+  let touchedDb = false;
+  const env = {
+    ACCESS_TEAM_DOMAIN: DOMAIN, ACCESS_AUD: AUD, ADMIN_EMAIL: ADMIN,
+    ADMIN_ORIGIN: "https://admin.example.com",
+    DB: { prepare() { touchedDb = true; throw new Error("must not query DB"); } },
+  };
+  const response = await worker.fetch(new Request("https://api.example.com/api/drafts"), env);
+  assert.equal(response.status, 401);
+  assert.equal(touchedDb, false);
+  assert.equal(response.headers.get("cache-control"), "no-store, max-age=0");
+});
+
+test("authorized create stores script-like HTML as data without executing it", async () => {
+  const team = "xss-test-team.cloudflareaccess.com";
+  const signed = await makeJwt({ iss: `https://${team}` });
+  globalThis.fetch = async () => new Response(JSON.stringify({ keys: [signed.jwk] }), {
+    status: 200, headers: { "content-type": "application/json", "cache-control": "max-age=30" },
+  });
+  const stored = [];
+  const env = {
+    ACCESS_TEAM_DOMAIN: team, ACCESS_AUD: AUD, ADMIN_EMAIL: ADMIN,
+    ADMIN_ORIGIN: "https://admin.example.com",
+    DB: {
+      prepare(sql) {
+        return {
+          bind(...args) {
+            return {
+              async run() {
+                if (sql.startsWith("INSERT")) {
+                  if (stored.some((row) => row.slug === args[2])) throw new Error("UNIQUE constraint failed");
+                  stored.push({ id: args[0], title: args[1], slug: args[2], summary: args[3], body_html: args[4], status: "draft", created_at: args[5], updated_at: args[6] });
+                }
+                return { meta: { changes: 1 } };
+              },
+              async all() { return { results: stored.map(({ body_html, ...row }) => row) }; },
+              async first() { return stored.find((row) => row.id === args[0]) || null; },
+            };
+          },
+        };
+      },
+    },
+  };
+  const { default: worker } = await import("../admin-api/src/index.js");
+  const payload = { title: "Unsafe-looking sample", slug: "safe-sample", summary: "", body_html: "<script>window.pwned=true</script>" };
+  const response = await worker.fetch(new Request("https://api.example.com/api/drafts", {
+    method: "POST",
+    headers: { Origin: env.ADMIN_ORIGIN, "Cf-Access-Jwt-Assertion": signed.token, "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  }), env);
+  assert.equal(response.status, 201);
+  assert.equal(stored[0].body_html, payload.body_html);
+  assert.equal(stored[0].status, "draft");
+});
+
+test("duplicate slug gives a clean 409 response without leaking database errors", async () => {
+  const team = "duplicate-test-team.cloudflareaccess.com";
+  const signed = await makeJwt({ iss: `https://${team}` });
+  globalThis.fetch = async () => new Response(JSON.stringify({ keys: [signed.jwk] }), {
+    status: 200, headers: { "content-type": "application/json", "cache-control": "max-age=30" },
+  });
+  const env = {
+    ACCESS_TEAM_DOMAIN: team, ACCESS_AUD: AUD, ADMIN_EMAIL: ADMIN,
+    ADMIN_ORIGIN: "https://admin.example.com",
+    DB: { prepare(sql) { return { bind() { return { async run() { throw new Error("UNIQUE constraint failed: private_table.secret_value"); } }; } }; } },
+  };
+  const { default: worker } = await import("../admin-api/src/index.js");
+  const response = await worker.fetch(new Request("https://api.example.com/api/drafts", {
+    method: "POST",
+    headers: { Origin: env.ADMIN_ORIGIN, "Cf-Access-Jwt-Assertion": signed.token, "Content-Type": "application/json" },
+    body: JSON.stringify({ title: "Duplicate", slug: "existing-slug", summary: "", body_html: "" }),
+  }), env);
+  const body = await response.text();
+  assert.equal(response.status, 409);
+  assert.match(body, /slug is already in use/i);
+  assert.doesNotMatch(body, /private_table|secret_value|UNIQUE constraint/i);
 });
