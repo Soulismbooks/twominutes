@@ -170,17 +170,20 @@ async function readJsonBody(request) {
   }
 }
 
-function originAllowed(request, env) {
+function configuredOriginIsValid(env) {
   if (typeof env.ADMIN_ORIGIN !== "string" || !env.ADMIN_ORIGIN) return false;
-  const supplied = request.headers.get("Origin");
-  if (!supplied) return false;
   try {
-    const configured = new URL(env.ADMIN_ORIGIN);
-    const origin = new URL(supplied);
-    return configured.origin === env.ADMIN_ORIGIN && origin.origin === supplied && supplied === configured.origin;
+    const parsed = new URL(env.ADMIN_ORIGIN);
+    return parsed.protocol === "https:" && parsed.origin === env.ADMIN_ORIGIN;
   } catch {
     return false;
   }
+}
+
+function originAllowed(request, env) {
+  if (!configuredOriginIsValid(env)) return false;
+  const supplied = request.headers.get("Origin");
+  return supplied === env.ADMIN_ORIGIN;
 }
 
 function safeError() {
@@ -211,7 +214,7 @@ export default {
     if (!env.DB || typeof env.ADMIN_EMAIL !== "string" ||
         !normalizeTeamDomain(env.ACCESS_TEAM_DOMAIN) ||
         typeof env.ACCESS_AUD !== "string" || !env.ACCESS_AUD.trim() ||
-        !originOK) {
+        !configuredOriginIsValid(env)) {
       return json({ error: "Admin API is not configured." }, 503);
     }
 
