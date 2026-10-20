@@ -316,9 +316,9 @@ async function createPublicationPullRequest(draft, env) {
   const branch = "admin-publish-" + safeId.replace(/-/g, "").slice(0, 16);
   const headFilter = encodeURIComponent(`${GITHUB_OWNER}:${branch}`);
   const existing = await githubRequest(token, `/repos/${GITHUB_REPO}/pulls?state=all&head=${headFilter}&base=${GITHUB_DEFAULT_BRANCH}`);
-  if (Array.isArray(existing) && existing.length) {
-    const item = existing[0];
-    if (item.html_url && item.number) return { pull_request_url: item.html_url, pull_request_number: item.number, status: item.state === "open" ? "ready_for_review" : "pull_request_exists" };
+  const existingPr = Array.isArray(existing) && existing.length ? existing[0] : null;
+  if (existingPr?.merged_at && existingPr.html_url && existingPr.number) {
+    return { pull_request_url: existingPr.html_url, pull_request_number: existingPr.number, status: "published", existing: true };
   }
   const mainRef = await githubRequest(token, `/repos/${GITHUB_REPO}/git/ref/heads/${GITHUB_DEFAULT_BRANCH}`);
   const mainSha = mainRef?.object?.sha;
@@ -360,9 +360,11 @@ async function createPublicationPullRequest(draft, env) {
     "",
     "Nothing is published by creating this PR. Merge is a separate approval step. The article HTML is filtered to remove script-capable elements and event-handler attributes before it enters the public feed."
   ].join("\n");
-  const pr = await githubRequest(token, `/repos/${GITHUB_REPO}/pulls`, "POST", { title: prTitle, head: branch, base: GITHUB_DEFAULT_BRANCH, body: prBody, maintainer_can_modify: false });
-  if (!pr?.html_url || !pr?.number) throw new Error("GitHub did not return the created Pull Request.");
-  return { pull_request_url: pr.html_url, pull_request_number: pr.number, status: "ready_for_review" };
+  const pr = existingPr
+    ? await githubRequest(token, `/repos/${GITHUB_REPO}/pulls/${existingPr.number}`, "PATCH", { title: prTitle, body: prBody, state: "open", maintainer_can_modify: false })
+    : await githubRequest(token, `/repos/${GITHUB_REPO}/pulls`, "POST", { title: prTitle, head: branch, base: GITHUB_DEFAULT_BRANCH, body: prBody, maintainer_can_modify: false });
+  if (!pr?.html_url || !pr?.number) throw new Error("GitHub did not return the publication Pull Request.");
+  return { pull_request_url: pr.html_url, pull_request_number: pr.number, status: "ready_for_review", existing: Boolean(existingPr) };
 }
 
 function safeError() {
