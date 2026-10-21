@@ -282,3 +282,63 @@ test("authorized DELETE removes only the selected draft", async () => {
   assert.equal(removed.length, 1);
   assert.match(removed[0].sql, /DELETE FROM admin_drafts WHERE id = \?/);
 });
+
+
+test("private R2 image endpoint rejects invalid draft IDs and declared MIME spoofing", async () => {
+  const { handleImageRequest } = await import("../src/images.js");
+  const bucket = { async put() { throw new Error("must not write rejected content"); } };
+  const env = { IMAGES: bucket };
+  const badId = await handleImageRequest(new Request("https://admin.example.com/api/images?draft=not-a-uuid", {
+    method: "POST", headers: { "content-type": "image/jpeg" }, body: new Uint8Array([0xff,0xd8,0xff])
+  }), new URL("https://admin.example.com/api/images?draft=not-a-uuid"), env);
+  assert.equal(badId.status, 400);
+
+  const uuid = "123e4567-e89b-42d3-a456-426614174000";
+  const spoof = await handleImageRequest(new Request(`https://admin.example.com/api/images?draft=${uuid}`, {
+    method: "POST", headers: { "content-type": "image/png" }, body: new Uint8Array([0xff,0xd8,0xff])
+  }), new URL(`https://admin.example.com/api/images?draft=${uuid}`), env);
+  assert.equal(spoof.status, 415);
+});
+
+test("private R2 image endpoint stores a generated private key and streams it back without public caching", async () => {
+  const { handleImageRequest } = await import("../src/images.js");
+  const draftId = "123e4567-e89b-42d3-a456-426614174000";
+  const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0x01, 0x02]);
+  const objects = new Map();
+  const bucket = {
+    async put(key, value, options) {
+      objects.set(key, { bytes: new Uint8Array(value), options });
+      return { key };
+    },
+    async get(key) {
+      const record = objects.get(key);
+      if (!record) return null;
+      return {
+        size: record.bytes.length,
+        body: new Response(record.bytes).body,
+        httpMetadata: record.options.httpMetadata,
+        httpEtag: '"test-etag"',
+      };
+    },
+  };
+  const env = { IMAGES: bucket };
+  const uploadUrl = new URL(`https://admin.example.com/api/images?draft=${draftId}`);
+  const upload = await handleImageRequest(new Request(uploadUrl, {
+    method: "POST",
+    headers: { "content-type": "image/jpeg" },
+    body: bytes,
+  }), uploadUrl, env);
+  assert.equal(upload.status, 201);
+  const uploaded = await upload.json();
+  assert.match(uploaded.key, new RegExp(`^drafts/${draftId}/[0-9a-f-]{36}\\.jpg$`));
+  assert.equal(objects.get(uploaded.key).options.httpMetadata.cacheControl, "private, no-store");
+  assert.deepEqual(Array.from(objects.get(uploaded.key).bytes), Array.from(bytes));
+
+  const imageUrl = new URL("https://admin.example.com" + uploaded.url);
+  const image = await handleImageRequest(new Request(imageUrl), imageUrl, env);
+  assert.equal(image.status, 200);
+  assert.equal(image.headers.get("content-type"), "image/jpeg");
+  assert.equal(image.headers.get("cache-control"), "private, no-store");
+  assert.equal(image.headers.get("x-content-type-options"), "nosniff");
+  assert.equal(await image.arrayBuffer().then(b => new Uint8Array(b)).then(b => Array.from(b).join(",")), Array.from(bytes).join(","));
+});
