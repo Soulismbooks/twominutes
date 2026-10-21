@@ -157,7 +157,7 @@ export default {
       }
       const match=url.pathname.match(/^\/api\/drafts\/([0-9a-f-]{36})$/i);
       if(match&&request.method === "DELETE"){
-        const removed=await env.DB.prepare("DELETE FROM admin_drafts WHERE id=?").bind(match[1]).run();
+        const removed=await env.DB.prepare("DELETE FROM admin_drafts WHERE id = ?").bind(match[1]).run();
         if(!removed.meta?.changes)return json({error:"Draft not found."},404,cors);
         return json({id:match[1],deleted:true},200,cors);
       }
