@@ -184,6 +184,7 @@ test("authorized create stores script-like HTML as data without executing it", a
                 return { results: stored.map(({ body_html, ...row }) => row) };
               },
               async first() { return stored.find((row) => row.id === args[0]) || null; },
+              async first() { return stored.find((row) => row.id === args[0]) || null; },
             };
           },
         };
@@ -213,6 +214,7 @@ test("duplicate slug gives a clean 409 response without leaking database errors"
     ADMIN_ORIGIN: "https://admin.example.com",
     DB: { prepare(sql) { return { bind() { return {
       async all() { if (sql === "PRAGMA table_info(admin_drafts)") return { results: ["id","title","slug","summary","body_html","status","created_at","updated_at"].map(name => ({name})) }; return {results:[]}; },
+      async first() { return null; },
       async run() { throw new Error("UNIQUE constraint failed: private_table.secret_value"); }
     }; } }; } },
   };
