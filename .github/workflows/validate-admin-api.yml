@@ -42,7 +42,8 @@ jobs:
           assert '"/api/drafts"' in js
           assert 'sandbox="allow-scripts"' in html
           assert 'sandbox="allow-same-origin"' not in html
-          assert 'srcdoc = buildPreviewDocument()' in js
+          assert 'srcdoc = preview.html' in js
+          assert 'async function privateImagesAsDataUrls' in js
           assert 'img-src data: blob:;' in js
           assert 'img-src data: blob: https:' not in js
           assert 'id="block-editor"' in html and 'id="draft-seo-title"' in html
