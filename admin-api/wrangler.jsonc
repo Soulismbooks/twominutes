@@ -25,5 +25,11 @@
       "database_name": "twominutes_admin_drafts",
       "database_id": "b63009bd-eb62-4658-bb23-bd171b11f335"
     }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "IMAGES",
+      "bucket_name": "twominutes-admin-images"
+    }
   ]
 }
