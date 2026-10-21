@@ -18,7 +18,9 @@ function sanitizeRichHtml(input) {
     const safe = document.createElement(node.tagName.toLowerCase());
     if (node.tagName === "IMG") {
       const src = node.getAttribute("src") || "";
-      if (!/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(src)) return document.createDocumentFragment();
+      const dataImage = /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(src);
+      const privateImage = /^\/api\/images\/drafts\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.(?:jpg|png|webp)$/i.test(src);
+      if (!dataImage && !privateImage) return document.createDocumentFragment();
       safe.setAttribute("src", src);
       safe.setAttribute("alt", (node.getAttribute("alt") || "").slice(0, 180));
       safe.setAttribute("loading", "lazy");
@@ -287,6 +289,28 @@ function insertHtmlAtCaret(html) {
   $("draft-body").value = $("block-editor").innerHTML;
   markDirty();
 }
+async function uploadImageToPrivateStorage(file) {
+  if (!state.currentId) {
+    throw new Error("Image upload से पहले Draft सेव करें। शीर्षक और URL slug भरकर Draft सेव करें, फिर इमेज जोड़ें।");
+  }
+  const dataUrl = await imageAsDataUrl(file);
+  const blobResponse = await fetch(dataUrl);
+  const blob = await blobResponse.blob();
+  const response = await fetch(API_BASE + `/api/images?draft=${encodeURIComponent(state.currentId)}`, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: { "content-type": blob.type || "image/jpeg" },
+    body: blob,
+  });
+  const raw = await response.text();
+  let result = {};
+  try { result = raw ? JSON.parse(raw) : {}; } catch { throw new Error("Image server ने अनपेक्षित response दिया।"); }
+  if (response.status === 401) throw new Error("Access login की पुष्टि नहीं हुई।");
+  if (response.status === 403) throw new Error("Image upload के लिए यह admin account अधिकृत नहीं है।");
+  if (!response.ok || typeof result.url !== "string") throw new Error(result.error || `Image upload असफल (HTTP ${response.status})`);
+  return result.url;
+}
 async function imageAsDataUrl(file) {
   if (!file || !/^image\/(jpeg|png|webp)$/.test(file.type)) throw new Error("कृपया JPEG, PNG या WebP इमेज चुनें।");
   if (file.size > 12 * 1024 * 1024) throw new Error("मूल इमेज 12 MB से छोटी होनी चाहिए।");
@@ -320,9 +344,9 @@ $("draft-inline-image").addEventListener("change", async (event) => {
   if (!file) return;
   try {
     showMessage("इमेज compress हो रही है…", "success");
-    const data = await imageAsDataUrl(file);
+    const imageUrl = await uploadImageToPrivateStorage(file);
     const alt = escapeHtml(file.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " "));
-    insertHtmlAtCaret(`<figure><img src="${data}" alt="${alt}" loading="lazy"><figcaption>${alt}</figcaption></figure><p><br></p>`);
+    insertHtmlAtCaret(`<figure><img src="${imageUrl}" alt="${alt}" loading="lazy"><figcaption>${alt}</figcaption></figure><p><br></p>`);
     showMessage("इमेज लेख में जोड़ दी गई है; draft सेव करें।", "success");
   } catch (error) {
     showMessage(error instanceof Error ? error.message : "Image जोड़ने में समस्या हुई।");
@@ -334,9 +358,9 @@ $("draft-featured-image").addEventListener("change", async (event) => {
   const file = event.target.files?.[0];
   if (!file) return;
   try {
-    const data = await imageAsDataUrl(file);
-    $("draft-featured-image-data").value = data;
-    $("featured-image-status").textContent = `Featured image तैयार · ${Math.round(data.length / 1024)} KB encoded`;
+    const imageUrl = await uploadImageToPrivateStorage(file);
+    $("draft-featured-image-data").value = imageUrl;
+    $("featured-image-status").textContent = "Private R2 image draft में अपलोड हो गई।";
     if (!$("draft-featured-alt").value.trim()) $("draft-featured-alt").value = file.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ");
     markDirty();
     showMessage("Featured image draft में जोड़ दी गई है।", "success");
