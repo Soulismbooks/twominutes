@@ -170,6 +170,10 @@ test("authorized create stores script-like HTML as data without executing it", a
     DB: {
       prepare(sql) {
         return {
+          async all() {
+            if (sql === "PRAGMA table_info(admin_drafts)") return { results: ["id","title","slug","summary","body_html","status","created_at","updated_at"].map(name => ({name})) };
+            return { results: stored.map(({ body_html, ...row }) => row) };
+          },
           bind(...args) {
             return {
               async run() {
@@ -211,11 +215,13 @@ test("duplicate slug gives a clean 409 response without leaking database errors"
   const env = {
     ACCESS_TEAM_DOMAIN: team, ACCESS_AUD: AUD, ADMIN_EMAIL: ADMIN,
     ADMIN_ORIGIN: "https://admin.example.com",
-    DB: { prepare(sql) { return { bind() { return {
+    DB: { prepare(sql) { return {
       async all() { if (sql === "PRAGMA table_info(admin_drafts)") return { results: ["id","title","slug","summary","body_html","status","created_at","updated_at"].map(name => ({name})) }; return {results:[]}; },
-      async first() { return null; },
-      async run() { throw new Error("UNIQUE constraint failed: private_table.secret_value"); }
-    }; } }; } },
+      bind() { return {
+        async first() { return null; },
+        async run() { throw new Error("UNIQUE constraint failed: private_table.secret_value"); }
+      }; }
+    }; } },
   };
   const { default: worker } = await import("../src/index.js");
   const response = await worker.fetch(new Request("https://api.example.com/api/drafts", {
