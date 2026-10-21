@@ -293,8 +293,9 @@ export default {
         if (body.error) return json({ error: body.error }, 400, cors);
         const parsed = parseDraft(body.value);
         if (parsed.error) return json({ error: parsed.error }, 400, cors);
-        const columns = await getDraftColumns(env.DB);
-        const metadataReady = draftMetadataReady(columns);
+        let metadataReady = false;
+        try { metadataReady = draftMetadataReady(await getDraftColumns(env.DB)); }
+        catch { return safeError(503, "Draft database schema is unavailable."); }
         const now = new Date().toISOString();
         const id = crypto.randomUUID();
         try {
@@ -339,8 +340,9 @@ export default {
         if (body.error) return json({ error: body.error }, 400, cors);
         const parsed = parseDraft(body.value);
         if (parsed.error) return json({ error: parsed.error }, 400, cors);
-        const columns = await getDraftColumns(env.DB);
-        const metadataReady = draftMetadataReady(columns);
+        let metadataReady = false;
+        try { metadataReady = draftMetadataReady(await getDraftColumns(env.DB)); }
+        catch { return safeError(503, "Draft database schema is unavailable."); }
         const now = new Date().toISOString();
         try {
           const query = metadataReady
