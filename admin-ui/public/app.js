@@ -414,17 +414,57 @@ async function saveDraft({ automatic = false } = {}) {
 }
 $("draft-form").addEventListener("submit", (event) => { event.preventDefault(); clearTimeout(state.timer); saveDraft(); });
 
-function buildPreviewDocument() {
-  const title = $("draft-title").value || "Article preview";
-  const content = $("draft-body").value || "<p>No content yet.</p>";
-  const csp = "default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'none'; font-src data:; form-action 'none'; base-uri 'none'";
-  // The iframe is sandboxed without allow-same-origin; untrusted code cannot access the admin DOM or origin.
-  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title><style>body{font:16px/1.65 system-ui,sans-serif;padding:1rem;max-width:820px;margin:auto;color:#25392b;overflow-wrap:anywhere}img{max-width:100%;height:auto}pre,code{white-space:pre-wrap;overflow-wrap:anywhere}a{color:#176b40}</style></head><body><h1>${escapeHtml(title)}</h1>${content}</body></html>`;
+async function privateImagesAsDataUrls(input) {
+  const container = document.createElement("div");
+  container.innerHTML = sanitizeRichHtml(input || "<p>No content yet.</p>");
+  let failed = false;
+  const images = Array.from(container.querySelectorAll("img[src^='/api/images/']"));
+  for (const image of images) {
+    const src = image.getAttribute("src") || "";
+    if (!/^\/api\/images\/drafts\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(?:jpg|png|webp)$/i.test(src)) {
+      image.removeAttribute("src");
+      failed = true;
+      continue;
+    }
+    try {
+      const response = await fetch(src, { credentials: "same-origin", cache: "no-store" });
+      if (!response.ok) throw new Error("Private image request failed");
+      const blob = await response.blob();
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      let binary = "";
+      for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+        binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+      }
+      image.setAttribute("src", `data:${blob.type || "image/jpeg"};base64,${btoa(binary)}`);
+    } catch {
+      image.removeAttribute("src");
+      failed = true;
+    }
+  }
+  return { html: container.innerHTML, failed };
 }
-$("preview-button").addEventListener("click", () => {
-  $("preview-frame").srcdoc = buildPreviewDocument();
-  $("preview-panel").classList.remove("hidden");
-  $("preview-panel").scrollIntoView({ behavior: "smooth", block: "start" });
+async function buildPreviewDocument() {
+  const title = $("draft-title").value || "Article preview";
+  const rendered = await privateImagesAsDataUrls($("draft-body").value);
+  const csp = "default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'none'; font-src data:; form-action 'none'; base-uri 'none'";
+  // Fetch private images in the authenticated Admin context, then pass data URLs into the opaque-origin sandbox.
+  return { html: `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title><style>body{font:16px/1.65 system-ui,sans-serif;padding:1rem;max-width:820px;margin:auto;color:#25392b;overflow-wrap:anywhere}img{max-width:100%;height:auto}pre,code{white-space:pre-wrap;overflow-wrap:anywhere}a{color:#176b40}</style></head><body><h1>${escapeHtml(title)}</h1>${rendered.html}</body></html>`, failed: rendered.failed };
+}
+$("preview-button").addEventListener("click", async () => {
+  const button = $("preview-button");
+  button.disabled = true;
+  try {
+    const preview = await buildPreviewDocument();
+    $("preview-frame").srcdoc = preview.html;
+    $("preview-panel").classList.remove("hidden");
+    $("preview-panel").scrollIntoView({ behavior: "smooth", block: "start" });
+    if (preview.failed) showMessage("कुछ निजी images preview में लोड नहीं हुईं। Access login और image storage जाँचें।");
+    else hideMessage();
+  } catch {
+    showMessage("Preview तैयार नहीं हो सका। पहले Draft save करें और पुनः प्रयास करें।");
+  } finally {
+    button.disabled = false;
+  }
 });
 $("close-preview").addEventListener("click", () => {
   $("preview-frame").srcdoc = "";
