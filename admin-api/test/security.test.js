@@ -184,7 +184,6 @@ test("authorized create stores script-like HTML as data without executing it", a
                 return { results: stored.map(({ body_html, ...row }) => row) };
               },
               async first() { return stored.find((row) => row.id === args[0]) || null; },
-              async first() { return stored.find((row) => row.id === args[0]) || null; },
             };
           },
         };
