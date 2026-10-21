@@ -45,7 +45,7 @@ function parseDraft(value) {
       typeof seoTitle!=="string"||seoTitle.length>70||typeof seoDescription!=="string"||seoDescription.length>160||
       typeof category!=="string"||!allowedCategories.has(category)||!Array.isArray(tags)||tags.length>20||
       tags.some(tag=>typeof tag!=="string"||tag.length>60)||typeof featuredImage!=="string"||featuredImage.length>270_000||
-      (featuredImage&&!/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(featuredImage))||
+      (featuredImage&&!(/^data:image\\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(featuredImage)||/^\\/api\\/images\\/drafts\\/[0-9a-f-]{36}\\/[0-9a-f-]{36}\\.(?:jpg|png|webp)$/i.test(featuredImage)))||
       typeof featuredImageAlt!=="string"||featuredImageAlt.length>180) return { error:"One or more fields are invalid or exceed the allowed limit." };
   const slug=safeSlug(rawSlug);
   if(!slug||slug.length>140) return {error:"A valid slug is required."};
