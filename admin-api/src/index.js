@@ -12,6 +12,8 @@ const JSON_HEADERS = {
   "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
 };
 const MAX_BODY_BYTES = 1_000_000;
+const CORE_DRAFT_COLUMNS = ["id", "title", "slug", "summary", "body_html", "status", "created_at", "updated_at"];
+const METADATA_DRAFT_COLUMNS = ["seo_title", "seo_description", "category", "tags", "featured_image", "featured_image_alt"];
 let jwksCache = { domain: null, expiresAt: 0, keys: null, pending: null };
 
 function json(data, status = 200, extra = {}) {
@@ -204,11 +206,39 @@ function originAllowed(request, env) {
   return supplied === env.ADMIN_ORIGIN;
 }
 
-function safeError() {
-  return json({ error: "The request could not be completed." }, 500);
+function safeError(status = 500, error = "The request could not be completed.") {
+  return json({ error }, status);
 }
 
-export { normalizeTeamDomain, safeSlug, parseDraft, hasValidClaims, verifyAccessJwt, readJsonBody, originAllowed };
+async function getDraftColumns(db) {
+  const result = await db.prepare("PRAGMA table_info(admin_drafts)").all();
+  const columns = new Set((result.results || []).map((column) => column.name));
+  if (CORE_DRAFT_COLUMNS.some((column) => !columns.has(column))) throw new Error("Draft database schema is incomplete.");
+  return columns;
+}
+
+function draftMetadataReady(columns) {
+  return METADATA_DRAFT_COLUMNS.every((column) => columns.has(column));
+}
+
+function safeParseTags(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== "string") return [];
+  try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed.filter((v) => typeof v === "string") : []; }
+  catch { return []; }
+}
+
+function draftFromRow(row, metadataReady) {
+  return { ...row,
+    seo_title: metadataReady ? (row.seo_title || "") : "",
+    seo_description: metadataReady ? (row.seo_description || "") : "",
+    category: metadataReady ? (row.category || "Happy Life") : "Happy Life",
+    tags: metadataReady ? safeParseTags(row.tags) : [],
+    featured_image: metadataReady ? (row.featured_image || "") : "",
+    featured_image_alt: metadataReady ? (row.featured_image_alt || "") : "" };
+}
+
+export { normalizeTeamDomain, safeSlug, parseDraft, hasValidClaims, verifyAccessJwt, readJsonBody, originAllowed, getDraftColumns, draftMetadataReady, draftFromRow };
 
 export default {
   async fetch(request, env) {
@@ -246,32 +276,40 @@ export default {
 
     try {
       if (url.pathname === "/api/health" && request.method === "GET") {
-        return json({ ok: true, service: "twominutes-admin-api" }, 200, cors);
+        let columns;
+        try { columns = await getDraftColumns(env.DB); }
+        catch { return json({ ok: false, service: "twominutes-admin-api", database: "unavailable" }, 503, cors); }
+        return json({ ok: true, service: "twominutes-admin-api", metadata_ready: draftMetadataReady(columns) }, 200, cors);
       }
       if (url.pathname === "/api/drafts" && request.method === "GET") {
-        const result = await env.DB.prepare(
-          "SELECT id, title, slug, summary, seo_title, seo_description, category, tags, featured_image_alt, status, created_at, updated_at FROM admin_drafts ORDER BY updated_at DESC LIMIT 100"
-        ).all();
-        return json({ drafts: result.results ?? [] }, 200, cors);
+        const columns = await getDraftColumns(env.DB);
+        const metadataReady = draftMetadataReady(columns);
+        const selection = [...CORE_DRAFT_COLUMNS, ...(metadataReady ? METADATA_DRAFT_COLUMNS : [])].join(", ");
+        const result = await env.DB.prepare(`SELECT ${selection} FROM admin_drafts ORDER BY updated_at DESC LIMIT 100`).all();
+        return json({ drafts: (result.results || []).map((row) => draftFromRow(row, metadataReady)), metadata_ready: metadataReady }, 200, cors);
       }
       if (url.pathname === "/api/drafts" && request.method === "POST") {
         const body = await readJsonBody(request);
         if (body.error) return json({ error: body.error }, 400, cors);
         const parsed = parseDraft(body.value);
         if (parsed.error) return json({ error: parsed.error }, 400, cors);
+        const columns = await getDraftColumns(env.DB);
+        const metadataReady = draftMetadataReady(columns);
         const now = new Date().toISOString();
         const id = crypto.randomUUID();
         try {
-          await env.DB.prepare(
-            "INSERT INTO admin_drafts (id, title, slug, summary, body_html, seo_title, seo_description, category, tags, featured_image, featured_image_alt, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)"
-          ).bind(id, parsed.data.title, parsed.data.slug, parsed.data.summary, parsed.data.body_html, parsed.data.seo_title, parsed.data.seo_description, parsed.data.category, JSON.stringify(parsed.data.tags), parsed.data.featured_image, parsed.data.featured_image_alt, now, now).run();
+          const query = metadataReady
+            ? "INSERT INTO admin_drafts (id, title, slug, summary, body_html, seo_title, seo_description, category, tags, featured_image, featured_image_alt, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)"
+            : "INSERT INTO admin_drafts (id, title, slug, summary, body_html, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'draft', ?, ?)";
+          const values = metadataReady
+            ? [id, parsed.data.title, parsed.data.slug, parsed.data.summary, parsed.data.body_html, parsed.data.seo_title, parsed.data.seo_description, parsed.data.category, JSON.stringify(parsed.data.tags), parsed.data.featured_image, parsed.data.featured_image_alt, now, now]
+            : [id, parsed.data.title, parsed.data.slug, parsed.data.summary, parsed.data.body_html, now, now];
+          await env.DB.prepare(query).bind(...values).run();
         } catch (error) {
-          if (String(error?.message || error).toLowerCase().includes("unique")) {
-            return json({ error: "This slug is already in use." }, 409, cors);
-          }
+          if (String(error?.message || error).toLowerCase().includes("unique")) return safeError(409, "This slug is already in use.");
           return safeError();
         }
-        return json({ id, status: "draft", created_at: now, updated_at: now }, 201, cors);
+        return json({ id, status: "draft", created_at: now, updated_at: now, metadata_ready: metadataReady, warning: metadataReady ? undefined : "Draft saved, but SEO/category/tags/featured-image metadata will not persist until migration 0002 is applied." }, 201, cors);
       }
       const reviewMatch = url.pathname.match(/^\/api\/drafts\/([0-9a-f-]{36})\/review$/i);
       if (reviewMatch && request.method === "PATCH") {
@@ -290,29 +328,34 @@ export default {
         return json({ id: match[1], deleted: true }, 200, cors);
       }
       if (match && request.method === "GET") {
-        const draft = await env.DB.prepare(
-          "SELECT id, title, slug, summary, body_html, seo_title, seo_description, category, tags, featured_image, featured_image_alt, status, created_at, updated_at FROM admin_drafts WHERE id = ?"
-        ).bind(match[1]).first();
-        return draft ? json({ draft }, 200, cors) : json({ error: "Draft not found." }, 404, cors);
+        const columns = await getDraftColumns(env.DB);
+        const metadataReady = draftMetadataReady(columns);
+        const selection = [...CORE_DRAFT_COLUMNS, ...(metadataReady ? METADATA_DRAFT_COLUMNS : [])].join(", ");
+        const draft = await env.DB.prepare(`SELECT ${selection} FROM admin_drafts WHERE id = ?`).bind(match[1]).first();
+        return draft ? json({ draft: draftFromRow(draft, metadataReady), metadata_ready: metadataReady }, 200, cors) : json({ error: "Draft not found." }, 404, cors);
       }
       if (match && request.method === "PUT") {
         const body = await readJsonBody(request);
         if (body.error) return json({ error: body.error }, 400, cors);
         const parsed = parseDraft(body.value);
         if (parsed.error) return json({ error: parsed.error }, 400, cors);
+        const columns = await getDraftColumns(env.DB);
+        const metadataReady = draftMetadataReady(columns);
         const now = new Date().toISOString();
         try {
-          const result = await env.DB.prepare(
-            "UPDATE admin_drafts SET title = ?, slug = ?, summary = ?, body_html = ?, seo_title = ?, seo_description = ?, category = ?, tags = ?, featured_image = ?, featured_image_alt = ?, updated_at = ? WHERE id = ?"
-          ).bind(parsed.data.title, parsed.data.slug, parsed.data.summary, parsed.data.body_html, parsed.data.seo_title, parsed.data.seo_description, parsed.data.category, JSON.stringify(parsed.data.tags), parsed.data.featured_image, parsed.data.featured_image_alt, now, match[1]).run();
+          const query = metadataReady
+            ? "UPDATE admin_drafts SET title = ?, slug = ?, summary = ?, body_html = ?, seo_title = ?, seo_description = ?, category = ?, tags = ?, featured_image = ?, featured_image_alt = ?, updated_at = ? WHERE id = ?"
+            : "UPDATE admin_drafts SET title = ?, slug = ?, summary = ?, body_html = ?, updated_at = ? WHERE id = ?";
+          const values = metadataReady
+            ? [parsed.data.title, parsed.data.slug, parsed.data.summary, parsed.data.body_html, parsed.data.seo_title, parsed.data.seo_description, parsed.data.category, JSON.stringify(parsed.data.tags), parsed.data.featured_image, parsed.data.featured_image_alt, now, match[1]]
+            : [parsed.data.title, parsed.data.slug, parsed.data.summary, parsed.data.body_html, now, match[1]];
+          const result = await env.DB.prepare(query).bind(...values).run();
           if (!result.meta?.changes) return json({ error: "Draft not found." }, 404, cors);
         } catch (error) {
-          if (String(error?.message || error).toLowerCase().includes("unique")) {
-            return json({ error: "This slug is already in use." }, 409, cors);
-          }
+          if (String(error?.message || error).toLowerCase().includes("unique")) return safeError(409, "This slug is already in use.");
           return safeError();
         }
-        return json({ id: match[1], status: "draft", updated_at: now }, 200, cors);
+        return json({ id: match[1], status: "draft", updated_at: now, metadata_ready: metadataReady, warning: metadataReady ? undefined : "Draft saved, but SEO/category/tags/featured-image metadata will not persist until migration 0002 is applied." }, 200, cors);
       }
       return json({ error: "Not found." }, 404, cors);
     } catch {
