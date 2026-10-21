@@ -94,7 +94,7 @@ async function readJsonBody(request) {
   if(!request.body)return {error:"Request body is required."};
   try{
     const reader=request.body.getReader(),chunks=[];let size=0;
-    while(true){const {value,done}=await reader.read();if(done)break;size+=value.byteLength;if(size>MAX_BODY_BYTES){await reader.cancel();return {error:"Request body too large.";}chunks.push(value);}
+    while(true){const {value,done}=await reader.read();if(done)break;size+=value.byteLength;if(size>MAX_BODY_BYTES){await reader.cancel();return {error:"Request body too large."};}chunks.push(value);}
     const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.byteLength;}
     return {value:JSON.parse(new TextDecoder().decode(bytes))};
   }catch{return {error:"Invalid JSON request body."};}
