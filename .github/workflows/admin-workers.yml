@@ -19,6 +19,10 @@ on:
       - "admin-api/**"
       - "admin-ui/**"
       - "migrations/**"
+      - "build.py"
+      - "feed.atom"
+      - "posts/**"
+      - "static/img/**"
       - ".github/workflows/admin-workers.yml"
 
 permissions:
