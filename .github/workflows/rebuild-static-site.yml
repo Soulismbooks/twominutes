@@ -8,6 +8,8 @@ on:
     paths:
       - "build.py"
       - "feed.atom"
+      - "posts/**"
+      - "static/img/**"
       - ".github/workflows/rebuild-static-site.yml"
 
 permissions:
@@ -27,13 +29,13 @@ jobs:
         run: python build.py
       - name: Commit regenerated site
         run: |
-          if git diff --quiet -- public; then
+          if git diff --quiet -- public && [ -z "$(git status --porcelain -- public)" ]; then
             echo "Generated site is already up to date."
           else
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add public
-            git commit -m "Rebuild static site from latest Blogger feed"
+            git commit -m "Rebuild static site from latest Blogger feed and admin posts"
             git push
           fi
       - name: Verify required deployment secret
