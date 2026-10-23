@@ -1,0 +1,83 @@
+name: Validate and deploy Admin Portal Workers
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_api:
+        description: Deploy Admin API Worker after tests
+        required: true
+        type: boolean
+        default: false
+      deploy_ui:
+        description: Deploy Admin UI Worker after tests
+        required: true
+        type: boolean
+        default: false
+  pull_request:
+    branches: [main]
+    paths:
+      - "admin-api/**"
+      - "admin-ui/**"
+      - "migrations/**"
+      - ".github/workflows/admin-workers.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check API syntax
+        working-directory: admin-api
+        run: node --check src/index.js && node --check src/images.js
+      - name: Run API security tests
+        working-directory: admin-api
+        run: npm test
+      - name: Check UI Worker syntax
+        working-directory: admin-ui
+        run: node --check src/index.js
+      - name: Check Wrangler configs parse
+        run: |
+          node -e "JSON.parse(require('fs').readFileSync('admin-api/wrangler.jsonc','utf8'))"
+          node -e "JSON.parse(require('fs').readFileSync('admin-ui/wrangler.jsonc','utf8'))"
+
+  deploy:
+    if: github.event_name == 'workflow_dispatch' && (inputs.deploy_api || inputs.deploy_ui)
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: admin-workers-production
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Configure Wrangler
+        run: npm install --global wrangler
+      - name: Verify deployment secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN" || (echo "::error::Set CLOUDFLARE_API_TOKEN in the admin-workers-production environment."; exit 1)
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || (echo "::error::Set CLOUDFLARE_ACCOUNT_ID in the admin-workers-production environment."; exit 1)
+      - name: Deploy Admin API only when selected
+        if: inputs.deploy_api
+        working-directory: admin-api
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy --config wrangler.jsonc
+      - name: Deploy Admin UI only when selected
+        if: inputs.deploy_ui
+        working-directory: admin-ui
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy --config wrangler.jsonc
