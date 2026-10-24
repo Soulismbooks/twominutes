@@ -69,12 +69,16 @@ if POSTS_DIR.is_dir():
         if not re.fullmatch(r"[a-z0-9\u0900-\u097F-]+", s) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", pub_date):
             raise RuntimeError(f"posts/{f.name} has an invalid slug or published date")
         c = str(j.get("body_html", ""))
-        img = first_img(c)
-        if img and img.startswith("/"):
+        img = str(j.get("featured_image", "")).strip() or first_img(c)
+        if img and img.startswith("/img/"):
             img = BASE + img
+        elif img and not img.startswith("https://"):
+            img = None  # never publish an unexpected image reference
+        labels_in = j.get("labels") or ([j.get("category")] if j.get("category") else []) + list(j.get("tags") or [])
         posts.append(dict(type="POST", path=f"/{pub_date[:4]}/{pub_date[5:7]}/{s}.html", title=clean_title(j.get("title")),
-                          pub=pub_date, upd=pub_date, content=tidy(c), desc=(str(j.get("summary", "")).strip() or text_of(c)),
-                          img=img, labels=[str(k).strip() for k in j.get("labels", []) if str(k).strip()]))
+                          seo_title=clean_title(j.get("seo_title")), pub=pub_date, upd=pub_date, content=tidy(c),
+                          desc=(str(j.get("seo_description", "")).strip() or str(j.get("summary", "")).strip() or text_of(c)),
+                          img=img, labels=[str(k).strip() for k in labels_in if str(k).strip()]))
 posts.sort(key=lambda p: p["pub"], reverse=True)
 pages.sort(key=lambda p: p["title"])
 
@@ -246,7 +250,7 @@ for p in posts + pages:
         <h2>रिज़ल्ट की पुष्टि करें</h2><p>यह अनुमान सामान्य जानकारी के लिए है। अंतिम टैक्स आपकी आय के प्रकार, deductions, TDS, capital gains और लागू नियमों पर निर्भर कर सकता है। रिटर्न जमा करने से पहले Income Tax Department के आधिकारिक पोर्टल और लागू वित्त वर्ष के निर्देशों से राशि की पुष्टि करें।</p></section>"""
     if tags:
         body += f'<div class="tags">{tags}</div>'
-    write(p["path"], layout(p["title"], p["desc"], p["path"], body, p["img"], p if p["type"] == "POST" else None))
+    write(p["path"], layout(p.get("seo_title") or p["title"], p["desc"], p["path"], body, p["img"], p if p["type"] == "POST" else None))
 
 labels = {}
 for p in posts:
