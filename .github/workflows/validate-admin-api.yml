@@ -24,12 +24,16 @@ jobs:
           node-version: "22"
       - name: Check Worker JavaScript syntax
         run: node --check admin-api/src/index.js
+      - name: Check Admin API modules
+        run: node --check admin-api/src/extras.js && node --check admin-api/src/images.js
       - name: Run Admin API security tests
         run: npm --prefix admin-api test
       - name: Check Admin UI JavaScript syntax
         run: node --check admin-ui/public/app.js
       - name: Check Admin UI Worker syntax
         run: node --input-type=module --check < admin-ui/src/index.js
+      - name: Check embedded Admin UI assets are in sync with public/
+        run: node admin-ui/scripts/sync-worker.mjs --check
       - name: Verify UI uses API endpoints, editor controls, and sandbox preview
         run: |
           python - <<'PY'

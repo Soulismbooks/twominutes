@@ -38,7 +38,7 @@ jobs:
           node-version: "22"
       - name: Check API syntax
         working-directory: admin-api
-        run: node --check src/index.js && node --check src/images.js
+        run: node --check src/index.js && node --check src/images.js && node --check src/extras.js
       - name: Run API security tests
         working-directory: admin-api
         run: npm test

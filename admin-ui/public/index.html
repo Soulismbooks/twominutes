@@ -34,7 +34,7 @@
         <div class="stats">
           <article class="stat"><span>कुल Drafts</span><strong id="stat-drafts">—</strong><small>Database से live count</small></article>
           <article class="stat"><span>Last saved</span><strong id="stat-saved">—</strong><small>सबसे हाल का update</small></article>
-          <article class="stat"><span>Published posts</span><strong>—</strong><small>Publishing integration अभी बाकी</small></article>
+          <article class="stat"><span>Publish के लिए भेजे</span><strong id="stat-review">—</strong><small>GitHub PR बन चुके drafts</small></article>
         </div>
         <div class="panel">
           <div class="panel-heading"><div><h2>हाल के Drafts</h2><p>Database से प्राप्त वास्तविक entries</p></div><button class="button secondary" data-page="drafts">सभी Drafts देखें</button></div>
@@ -65,7 +65,7 @@
               <label class="field"><span>श्रेणी</span><select id="draft-category"><option value="Happy Life">Happy Life</option><option value="Money Tips">Money Tips</option><option value="Soulism">Soulism</option></select></label>
               <label class="field"><span>Tags (comma से अलग करें)</span><input id="draft-tags" maxlength="400" placeholder="happiness, habits, life"></label>
               <label class="field full"><span>Featured Image</span><input id="draft-featured-image" type="file" accept="image/jpeg,image/png,image/webp,image/gif"><input id="draft-featured-image-data" type="hidden"><input id="draft-featured-alt" maxlength="180" placeholder="इमेज का वर्णन (Alt text)"><small>छवि compress होकर private R2 में upload होगी। पहले Draft सेव करें; JPEG/PNG/WebP समर्थित हैं।</small><div id="featured-image-status" class="muted">कोई featured image नहीं चुनी गई।</div></label>
-              <label class="field full"><span>Publishing workflow</span><div class="button-row"><button id="review-button" class="button secondary" type="button">Review के लिए भेजें</button><span id="review-status" class="muted">Draft अभी प्रकाशित नहीं है।</span></div><small>यह केवल review status बदलेगा; सार्वजनिक वेबसाइट पर अपने-आप publish नहीं करेगा।</small></label>
+              <div class="field full"><span>Publishing workflow</span><div class="button-row"><button id="review-button" class="button secondary" type="button">Review के लिए चिह्नित करें</button><button id="publish-button" class="button primary" type="button">Publish करें (PR बनाएँ)</button></div><span id="review-status" class="muted">Draft अभी प्रकाशित नहीं है।</span><small>Publish दबाने पर GitHub में Pull Request बनता है। लेख तभी लाइव होगा जब आप उस PR को Merge करेंगे। पहले Draft सेव करें।</small><div id="publish-result" class="publish-result hidden"></div></div>
               <div class="field full">
                 <span>ब्लॉक एडिटर</span>
                 <div class="block-toolbar" role="toolbar" aria-label="Content formatting">
@@ -86,14 +86,16 @@
             <div class="editor-footer"><span class="muted" id="body-length">0 characters</span><div class="button-row"><button id="preview-button" class="button secondary" type="button">Preview</button><button id="save-button" class="button primary" type="submit">Draft सेव करें</button></div></div>
           </form>
           <div id="preview-panel" class="preview-panel hidden"><div class="panel-heading"><div><h3>Sandboxed Preview</h3><p>HTML/JS अलग sandbox में चलता है, Admin page के origin में नहीं।</p></div><button id="close-preview" class="button secondary" type="button">बंद करें</button></div><iframe id="preview-frame" title="Sandboxed article preview" sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe></div>
-          <div class="publish-notice"><strong>Publish अभी बंद है</strong><p>Publish feature तब सक्रिय होगा जब GitHub PR-based publishing, validation और explicit approval flow पूरा होगा।</p></div>
         </div>
       </section>
 
       <section id="page-analytics" class="page">
         <div class="panel">
-          <div class="panel-heading"><div><h2>Analytics</h2><p>यहाँ कोई sample या मनगढ़ंत आंकड़ा नहीं दिखाया जाएगा।</p></div><span class="status-pill">अभी जुड़ा नहीं</span></div>
-          <div class="empty analytics-empty"><span>↗</span><strong>Analytics source configure करना बाकी है</strong><p>Cloudflare Web Analytics या किसी वास्तविक provider से data जोड़ने के बाद visitors, views, top pages और referrers दिखेंगे।</p></div>
+          <div class="panel-heading">
+            <div><h2>Analytics</h2><p>Cloudflare से आया असली ट्रैफ़िक डेटा। कोई sample आंकड़ा नहीं।</p></div>
+            <div class="button-row"><button class="button secondary range-button active" data-days="7" type="button">7 दिन</button><button class="button secondary range-button" data-days="30" type="button">30 दिन</button></div>
+          </div>
+          <div id="analytics-body"><div class="empty analytics-empty"><strong>Analytics लोड हो रहा है…</strong></div></div>
         </div>
       </section>
 

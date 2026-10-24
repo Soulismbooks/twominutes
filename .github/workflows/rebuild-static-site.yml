@@ -29,7 +29,7 @@ jobs:
         run: python build.py
       - name: Commit regenerated site
         run: |
-          if git diff --quiet -- public; then
+          if git diff --quiet -- public && [ -z "$(git status --porcelain -- public)" ]; then
             echo "Generated site is already up to date."
           else
             git config user.name "github-actions[bot]"

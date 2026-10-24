@@ -1,7 +1,7 @@
 const API_BASE = ""; // Same protected hostname; /api/* must be routed to the separate Admin API Worker.
 const ADMIN_EMAIL = "shashank77a@gmail.com";
 const $ = (id) => document.getElementById(id);
-const state = { drafts: [], currentId: null, timer: null, saving: false, dirty: false, lastSaved: null };
+const state = { drafts: [], currentId: null, timer: null, saving: false, dirty: false, lastSaved: null, status: "draft", days: 7, publishing: false };
 const pageNames = { dashboard: "Dashboard", drafts: "Drafts", editor: "लेख Editor", analytics: "Analytics" };
 
 
@@ -67,6 +67,7 @@ function showPage(page) {
   $("page-title").textContent = pageNames[page] || page;
   hideMessage();
   if (page === "drafts" || page === "dashboard") refreshDrafts();
+  if (page === "analytics") loadAnalytics();
 }
 document.querySelectorAll(".nav-link").forEach((button) => button.addEventListener("click", () => showPage(button.dataset.page)));
 document.querySelectorAll("[data-page]").forEach((button) => {
@@ -149,8 +150,8 @@ function emptyState(title, description) {
   const node = document.createElement("div");
   node.className = "empty";
   const strong = document.createElement("strong"); strong.textContent = title;
-  const p = document.createElement("p"); p.textContent = description;
-  node.append(strong, p);
+  node.append(strong);
+  if (description) { const p = document.createElement("p"); p.textContent = description; node.append(p); }
   return node;
 }
 function renderDrafts() {
@@ -158,6 +159,7 @@ function renderDrafts() {
   const drafts = state.drafts.filter((draft) => `${draft.title} ${draft.slug}`.toLowerCase().includes(query));
   $("draft-count").textContent = String(state.drafts.length);
   $("stat-drafts").textContent = String(state.drafts.length);
+  $("stat-review").textContent = String(state.drafts.filter((d) => d.status === "ready_for_review").length);
   $("stat-saved").textContent = state.drafts[0] ? dateLabel(state.drafts[0].updated_at) : "—";
   const recent = $("recent-drafts"); recent.replaceChildren();
   const recentItems = state.drafts.slice(0, 5);
@@ -207,6 +209,8 @@ function setForm(draft = {}) {
   $("preview-panel").classList.add("hidden");
   setSaveState(draft.id ? `Last saved: ${dateLabel(draft.updated_at)}` : "अभी सेव नहीं हुआ", draft.id ? "saved" : "");
   state.currentId = draft.id || null;
+  state.status = draft.status || "draft";
+  setPublishResult(null);
   state.dirty = false;
   state.lastSaved = draft.updated_at || null;
 }
@@ -296,13 +300,20 @@ async function uploadImageToPrivateStorage(file) {
   const dataUrl = await imageAsDataUrl(file);
   const blobResponse = await fetch(dataUrl);
   const blob = await blobResponse.blob();
-  const response = await fetch(API_BASE + `/api/images?draft=${encodeURIComponent(state.currentId)}`, {
-    method: "POST",
-    credentials: "same-origin",
-    cache: "no-store",
-    headers: { "content-type": blob.type || "image/jpeg" },
-    body: blob,
-  });
+  let response;
+  try {
+    response = await fetch(API_BASE + `/api/images?draft=${encodeURIComponent(state.currentId)}`, {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: { "content-type": blob.type || "image/jpeg" },
+      body: blob,
+    });
+  } catch {
+    throw new Error(navigator.onLine
+      ? "Image API से connection नहीं बन पाया। पेज refresh करके पुनः प्रयास करें; समस्या रहे तो API route और Cloudflare Access की जाँच आवश्यक है।"
+      : "Internet connection नहीं है। Connection ठीक होने पर दोबारा प्रयास करें।");
+  }
   const raw = await response.text();
   let result = {};
   try { result = raw ? JSON.parse(raw) : {}; } catch { throw new Error("Image server ने अनपेक्षित response दिया।"); }
@@ -470,6 +481,114 @@ $("close-preview").addEventListener("click", () => {
   $("preview-frame").srcdoc = "";
   $("preview-panel").classList.add("hidden");
 });
+
+/* ---------------- Publish (opens a GitHub Pull Request) ---------------- */
+function setPublishResult(kind, text, url) {
+  const node = $("publish-result");
+  node.replaceChildren();
+  if (!kind) { node.className = "publish-result hidden"; return; }
+  node.className = `publish-result ${kind}`;
+  node.append(document.createTextNode(text));
+  if (url && url.startsWith("https://github.com/")) {
+    node.append(document.createTextNode(" "));
+    const a = document.createElement("a");
+    a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer"; a.textContent = "Pull Request खोलें";
+    node.append(a);
+  }
+}
+$("publish-button").addEventListener("click", async () => {
+  if (state.publishing) return;
+  if (!state.currentId) { setPublishResult("error", "पहले Draft सेव करें, फिर Publish करें।"); return; }
+  if (state.dirty || state.saving) { setPublishResult("error", "पहले सभी बदलाव सेव होने दें।"); return; }
+  const again = state.status === "ready_for_review" ? "इस Draft का PR पहले बन चुका है; अगर वह Merge हो चुका है तो दोबारा भेजने पर 'slug पहले से मौजूद' का संदेश आएगा। " : "";
+  if (!window.confirm(`${again}यह लेख GitHub में Pull Request के रूप में भेजा जाएगा। लेख तभी लाइव होगा जब आप उस PR को Merge करेंगे। आगे बढ़ें?`)) return;
+  state.publishing = true;
+  $("publish-button").disabled = true;
+  setPublishResult(null);
+  try {
+    const result = await api(`/api/drafts/${encodeURIComponent(state.currentId)}/publish`, { method: "POST", body: JSON.stringify({}) });
+    state.status = "ready_for_review";
+    setPublishResult("success", "Pull Request बन गया। Merge करते ही साइट दोबारा बनेगी और लेख लाइव होगा।", result.pr_url);
+    await refreshDrafts();
+  } catch (error) {
+    setPublishResult("error", error instanceof Error ? error.message : "Publish असफल।");
+  } finally {
+    state.publishing = false;
+    $("publish-button").disabled = false;
+  }
+});
+
+/* ---------------- Analytics (real Cloudflare traffic data) ---------------- */
+const numberFormat = new Intl.NumberFormat("hi-IN");
+function shortDate(value) {
+  const d = new Date(`${value}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? String(value) : d.toLocaleDateString("hi-IN", { day: "numeric", month: "short" });
+}
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+function renderAnalytics(data) {
+  const body = $("analytics-body");
+  body.replaceChildren();
+  const stats = el("div", "a-stats");
+  [["Page views", data.totals.page_views], ["Visitors (दैनिक जोड़)", data.totals.visitors_sum], ["कुल requests", data.totals.requests]].forEach(([label, value]) => {
+    const card = el("div", "a-stat"); card.append(el("span", "", label), el("strong", "", numberFormat.format(value || 0))); stats.append(card);
+  });
+  body.append(stats);
+  if (!data.daily.length) {
+    body.append(emptyState("इस अवधि का कोई डेटा नहीं", "Cloudflare ने अभी इस zone के लिए आंकड़े नहीं दिए।"));
+  } else {
+    const max = Math.max(...data.daily.map((d) => d.page_views || 0), 1);
+    const bars = el("div", "a-bars");
+    data.daily.forEach((d) => {
+      const bar = el("div", "a-bar");
+      bar.style.height = `${Math.max(2, Math.round(((d.page_views || 0) / max) * 120))}px`;
+      bar.title = `${shortDate(d.date)}: ${numberFormat.format(d.page_views || 0)} page views`;
+      bars.append(bar);
+    });
+    body.append(bars);
+    const axis = el("div", "a-axis");
+    axis.append(el("span", "", shortDate(data.daily[0].date)), el("span", "", shortDate(data.daily[data.daily.length - 1].date)));
+    body.append(axis);
+    const table = el("table", "a-table");
+    const head = el("tr"); ["तारीख", "Page views", "Visitors"].forEach((h, i) => head.append(el("th", i ? "num" : "", h)));
+    table.append(head);
+    [...data.daily].reverse().forEach((d) => {
+      const row = el("tr");
+      row.append(el("td", "", shortDate(d.date)), el("td", "num", numberFormat.format(d.page_views || 0)), el("td", "num", numberFormat.format(d.visitors || 0)));
+      table.append(row);
+    });
+    body.append(table);
+  }
+  body.append(el("h3", "a-sub", "सबसे ज़्यादा देखे गए पेज (पिछले 24 घंटे)"));
+  if (Array.isArray(data.top_pages) && data.top_pages.length) {
+    const table = el("table", "a-table");
+    const head = el("tr"); ["पेज", "Views"].forEach((h, i) => head.append(el("th", i ? "num" : "", h)));
+    table.append(head);
+    data.top_pages.forEach((p) => { const row = el("tr"); row.append(el("td", "", p.path), el("td", "num", numberFormat.format(p.views))); table.append(row); });
+    body.append(table);
+  } else {
+    body.append(el("p", "a-note", data.top_pages === null ? "टॉप पेज की सूची अभी उपलब्ध नहीं है।" : "पिछले 24 घंटे में कोई पेज दर्ज नहीं हुआ।"));
+  }
+  if (data.note) body.append(el("p", "a-note", data.note));
+}
+async function loadAnalytics() {
+  const body = $("analytics-body");
+  body.replaceChildren(emptyState("Analytics लोड हो रहा है…"));
+  try {
+    renderAnalytics(await api(`/api/analytics?days=${state.days}`));
+  } catch (error) {
+    body.replaceChildren(emptyState("Analytics नहीं दिखा सके", error instanceof Error ? error.message : "फिर प्रयास करें।"));
+  }
+}
+document.querySelectorAll(".range-button").forEach((button) => button.addEventListener("click", () => {
+  state.days = Number(button.dataset.days) === 30 ? 30 : 7;
+  document.querySelectorAll(".range-button").forEach((b) => b.classList.toggle("active", b === button));
+  loadAnalytics();
+}));
 
 window.addEventListener("beforeunload", (event) => {
   if (state.dirty || state.saving) {
