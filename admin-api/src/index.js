@@ -3,6 +3,7 @@
  * Hosted only behind verified Cloudflare Access; workers_dev remains disabled.
  */
 import { handleImageRequest } from "./images.js";
+import { publishDraft, getAnalytics } from "./extras.js";
 
 const JSON_HEADERS = {
   "content-type": "application/json; charset=utf-8",
@@ -129,7 +130,7 @@ export default {
       }
       if(url.pathname==="/api/health"&&request.method==="GET"){
         let columns;try{columns=await getDraftColumns(env.DB);}catch{return json({ok:false,service:"twominutes-admin-api",database:"unavailable"},503,cors);}
-        return json({ok:true,service:"twominutes-admin-api",metadata_ready:draftMetadataReady(columns),image_storage_ready:Boolean(env.IMAGES)},200,cors);
+        return json({ok:true,service:"twominutes-admin-api",metadata_ready:draftMetadataReady(columns),image_storage_ready:Boolean(env.IMAGES),publish_ready:Boolean(env.GITHUB_TOKEN),analytics_ready:Boolean(env.CF_API_TOKEN&&env.CF_ZONE_ID)},200,cors);
       }
       if(url.pathname==="/api/drafts"&&request.method==="GET"){
         const columns=await getDraftColumns(env.DB),metadataReady=draftMetadataReady(columns);
@@ -148,6 +149,20 @@ export default {
           await env.DB.prepare(query).bind(...values).run();
         }catch(error){if(String(error?.message||error).toLowerCase().includes("unique"))return safeError(409,"This slug is already in use.");return safeError();}
         return json({id,status:"draft",created_at:now,updated_at:now,metadata_ready:metadataReady,warning:metadataReady?undefined:"Draft saved, but SEO/category/tags/featured-image metadata will not persist until migration 0002 is applied."},201,cors);
+      }
+      if(url.pathname==="/api/analytics"&&request.method==="GET"){
+        const out=await getAnalytics(url,env);
+        return json(out.body,out.status,cors);
+      }
+      const publishMatch=url.pathname.match(/^\/api\/drafts\/([0-9a-f-]{36})\/publish$/i);
+      if(publishMatch&&request.method==="POST"){
+        const columns=await getDraftColumns(env.DB),metadataReady=draftMetadataReady(columns);
+        const selection=[...CORE_DRAFT_COLUMNS,...(metadataReady?METADATA_DRAFT_COLUMNS:[])].join(", ");
+        const row=await env.DB.prepare(`SELECT ${selection} FROM admin_drafts WHERE id=?`).bind(publishMatch[1]).first();
+        if(!row)return json({error:"Draft not found."},404,cors);
+        const out=await publishDraft(draftFromRow(row,metadataReady),env);
+        if(out.status===201)await env.DB.prepare("UPDATE admin_drafts SET status='ready_for_review',updated_at=? WHERE id=?").bind(new Date().toISOString(),publishMatch[1]).run();
+        return json(out.body,out.status,cors);
       }
       const reviewMatch=url.pathname.match(/^\/api\/drafts\/([0-9a-f-]{36})\/review$/i);
       if(reviewMatch&&request.method==="PATCH"){
