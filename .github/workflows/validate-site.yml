@@ -8,6 +8,8 @@ on:
       - "build.py"
       - "feed.atom"
       - ".github/workflows/validate-site.yml"
+      - "posts/**"
+      - "static/img/**"
 
 permissions:
   contents: read

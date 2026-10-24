@@ -9,6 +9,8 @@ on:
       - "build.py"
       - "feed.atom"
       - ".github/workflows/rebuild-static-site.yml"
+      - "posts/**"
+      - "static/img/**"
 
 permissions:
   contents: write

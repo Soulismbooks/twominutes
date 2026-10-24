@@ -1,0 +1,90 @@
+name: Validate admin API foundation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "admin-api/**"
+      - "admin-ui/**"
+      - "migrations/**"
+      - ".github/workflows/validate-admin-api.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check Worker JavaScript syntax
+        run: node --check admin-api/src/index.js
+      - name: Run Admin API security tests
+        run: npm --prefix admin-api test
+      - name: Check Admin UI JavaScript syntax
+        run: node --check admin-ui/public/app.js
+      - name: Check Admin UI Worker syntax
+        run: node --input-type=module --check < admin-ui/src/index.js
+      - name: Verify UI uses API endpoints, editor controls, and sandbox preview
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          html = Path("admin-ui/public/index.html").read_text(encoding="utf-8")
+          js = Path("admin-ui/public/app.js").read_text(encoding="utf-8")
+          worker = Path("admin-ui/src/index.js").read_text(encoding="utf-8")
+          config = Path("admin-ui/wrangler.jsonc").read_text(encoding="utf-8")
+          assert 'href="/styles.css"' in html and 'src="/app.js"' in html
+          assert '"/api/drafts"' in js
+          assert 'sandbox="allow-scripts"' in html
+          assert 'sandbox="allow-same-origin"' not in html
+          assert 'srcdoc = preview.html' in js
+          assert 'async function privateImagesAsDataUrls' in js
+          assert 'img-src data: blob:;' in js
+          assert 'img-src data: blob: https:' not in js
+          assert 'id="block-editor"' in html and 'id="draft-seo-title"' in html
+          assert 'id="draft-featured-image"' in html and 'id="draft-category"' in html
+          assert 'block-editor' in js and 'insertHtmlAtCaret' in js
+          assert 'async function deleteDraft' in js
+          assert 'sanitizeRichHtml' in js
+          assert 'request.method === "DELETE"' in Path("admin-api/src/index.js").read_text(encoding="utf-8")
+          assert 'id=\\\"block-editor\\\"' in worker
+          assert '"workers_dev": false' in config
+          assert '"routes"' not in config
+          print("Admin UI wiring, embedded asset sync, and route safety checks passed.")
+          PY
+      - name: Validate draft migration and constraints
+        run: |
+          python - <<'PY'
+          import sqlite3
+          from pathlib import Path
+
+          db = sqlite3.connect(":memory:")
+          db.executescript(Path("migrations/0001_admin_drafts.sql").read_text(encoding="utf-8"))
+          columns = {row[1] for row in db.execute("PRAGMA table_info(admin_drafts)")}
+          required = {"id", "title", "slug", "summary", "body_html", "status", "created_at", "updated_at"}
+          assert required.issubset(columns), f"Missing columns: {required - columns}"
+
+          row = ("1", "Example", "example-slug", "", "<p>Draft only</p>", "draft", "2026-10-20T00:00:00Z", "2026-10-20T00:00:00Z")
+          db.execute("INSERT INTO admin_drafts VALUES (?, ?, ?, ?, ?, ?, ?, ?)", row)
+          try:
+              db.execute("INSERT INTO admin_drafts VALUES (?, ?, ?, ?, ?, ?, ?, ?)", ("2", "Duplicate", "example-slug", "", "", "draft", row[6], row[7]))
+              raise AssertionError("Duplicate slug was incorrectly accepted")
+          except sqlite3.IntegrityError:
+              pass
+
+          try:
+              db.execute("INSERT INTO admin_drafts VALUES (?, ?, ?, ?, ?, ?, ?, ?)", ("3", "Bad status", "bad-status", "", "", "published", row[6], row[7]))
+              raise AssertionError("Unexpected status was incorrectly accepted")
+          except sqlite3.IntegrityError:
+              pass
+          db.executescript(Path("migrations/0002_admin_editor_metadata.sql").read_text(encoding="utf-8"))
+          columns = {row[1] for row in db.execute("PRAGMA table_info(admin_drafts)")}
+          required_meta = {"seo_title", "seo_description", "category", "tags", "featured_image", "featured_image_alt"}
+          assert required_meta.issubset(columns), f"Missing metadata: {required_meta - columns}"
+          print("Draft schema and editor metadata constraints validated.")
+          PY

@@ -1,0 +1,35 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "twominutes-admin-api",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-20",
+  "workers_dev": false,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "persist": true,
+      "invocation_logs": true
+    },
+    "traces": {
+      "enabled": false,
+      "persist": false,
+      "head_sampling_rate": 0.1
+    }
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "twominutes_admin_drafts",
+      "database_id": "b63009bd-eb62-4658-bb23-bd171b11f335"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "IMAGES",
+      "bucket_name": "twominutes-admin-images"
+    }
+  ]
+}
