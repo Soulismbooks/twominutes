@@ -293,13 +293,21 @@ function insertHtmlAtCaret(html) {
   $("draft-body").value = $("block-editor").innerHTML;
   markDirty();
 }
+function dataUrlToBlob(dataUrl) {
+  const match = /^data:([^;,]+);base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl);
+  if (!match) throw new Error("Image processing असफल रही; दूसरी image चुनें।");
+  const raw = atob(match[2]);
+  const bytes = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+  return new Blob([bytes], { type: match[1] });
+}
 async function uploadImageToPrivateStorage(file) {
   if (!state.currentId) {
     throw new Error("Image upload से पहले Draft सेव करें। शीर्षक और URL slug भरकर Draft सेव करें, फिर इमेज जोड़ें।");
   }
   const dataUrl = await imageAsDataUrl(file);
-  const blobResponse = await fetch(dataUrl);
-  const blob = await blobResponse.blob();
+  // Do not fetch() the data: URL; the page CSP (connect-src 'self') blocks it and the browser reports "Failed to fetch".
+  const blob = dataUrlToBlob(dataUrl);
   let response;
   try {
     response = await fetch(API_BASE + `/api/images?draft=${encodeURIComponent(state.currentId)}`, {
