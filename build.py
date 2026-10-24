@@ -57,6 +57,28 @@ for e in root.findall("a:entry", NS):
              content=tidy(c), desc=text_of(c), img=first_img(c),
              labels=[k.get("term") for k in e.findall("a:category", NS) if k.get("term")])
     (posts if typ == "POST" else pages).append(d)
+# Posts published from the Admin Portal: one JSON file per post in posts/, added via a GitHub PR.
+POSTS_DIR = ROOT / "posts"
+if POSTS_DIR.is_dir():
+    for f in sorted(POSTS_DIR.glob("*.json")):
+        try:
+            j = json.loads(f.read_text(encoding="utf-8"))
+        except ValueError as err:
+            raise RuntimeError(f"posts/{f.name} is not valid JSON: {err}")
+        s, pub_date = str(j.get("slug", "")), str(j.get("published", ""))
+        if not re.fullmatch(r"[a-z0-9\u0900-\u097F-]+", s) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", pub_date):
+            raise RuntimeError(f"posts/{f.name} has an invalid slug or published date")
+        c = str(j.get("body_html", ""))
+        img = str(j.get("featured_image", "")).strip() or first_img(c)
+        if img and img.startswith("/img/"):
+            img = BASE + img
+        elif img and not img.startswith("https://"):
+            img = None  # never publish an unexpected image reference
+        labels_in = j.get("labels") or ([j.get("category")] if j.get("category") else []) + list(j.get("tags") or [])
+        posts.append(dict(type="POST", path=f"/{pub_date[:4]}/{pub_date[5:7]}/{s}.html", title=clean_title(j.get("title")),
+                          seo_title=clean_title(j.get("seo_title")), pub=pub_date, upd=pub_date, content=tidy(c),
+                          desc=(str(j.get("seo_description", "")).strip() or str(j.get("summary", "")).strip() or text_of(c)),
+                          img=img, labels=[str(k).strip() for k in labels_in if str(k).strip()]))
 posts.sort(key=lambda p: p["pub"], reverse=True)
 pages.sort(key=lambda p: p["title"])
 
@@ -228,7 +250,7 @@ for p in posts + pages:
         <h2>रिज़ल्ट की पुष्टि करें</h2><p>यह अनुमान सामान्य जानकारी के लिए है। अंतिम टैक्स आपकी आय के प्रकार, deductions, TDS, capital gains और लागू नियमों पर निर्भर कर सकता है। रिटर्न जमा करने से पहले Income Tax Department के आधिकारिक पोर्टल और लागू वित्त वर्ष के निर्देशों से राशि की पुष्टि करें।</p></section>"""
     if tags:
         body += f'<div class="tags">{tags}</div>'
-    write(p["path"], layout(p["title"], p["desc"], p["path"], body, p["img"], p if p["type"] == "POST" else None))
+    write(p["path"], layout(p.get("seo_title") or p["title"], p["desc"], p["path"], body, p["img"], p if p["type"] == "POST" else None))
 
 labels = {}
 for p in posts:
@@ -278,4 +300,7 @@ write("/ads.txt", f"google.com, pub-{ADSENSE.split('-')[-1]}, DIRECT, f08c47fec0
 write("/_redirects", "\n".join(redirects) + "\n")
 write("/_headers", "/*\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: strict-origin-when-cross-origin\n/*.html\n  Cache-Control: public, max-age=0, must-revalidate\n")
 shutil.copy(ROOT / "static" / "favicon.ico", OUT / "favicon.ico")
+# Images uploaded through the Admin Portal are committed to static/img/ and served at /img/.
+if (ROOT / "static" / "img").is_dir():
+    shutil.copytree(ROOT / "static" / "img", OUT / "img", dirs_exist_ok=True)
 print(f"{len(posts)} posts, {len(pages)} pages, {len(labels)} labels -> {OUT}")
