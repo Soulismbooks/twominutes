@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+<title id="title">सब कुछ पाए बिना भी खुश रहने की कला</title><desc id="desc">सूर्योदय के समय पहाड़ों के बीच शांत बैठा व्यक्ति, संतोष और आंतरिक खुशी का प्रतीक।</desc>
+<defs>
+ <linearGradient id="sky" x2="0" y2="1"><stop stop-color="#f6c77d"/><stop offset=".52" stop-color="#f8e6c5"/><stop offset="1" stop-color="#dce8d9"/></linearGradient>
+ <linearGradient id="sun" x2="0" y2="1"><stop stop-color="#fff4b2"/><stop offset="1" stop-color="#f2a84b"/></linearGradient>
+ <linearGradient id="mount" x2="0" y2="1"><stop stop-color="#829d8a"/><stop offset="1" stop-color="#395b50"/></linearGradient>
+ <linearGradient id="front" x2="0" y2="1"><stop stop-color="#355c4b"/><stop offset="1" stop-color="#173e35"/></linearGradient>
+ <filter id="blur"><feGaussianBlur stdDeviation="22"/></filter>
+ </defs>
+<rect width="1600" height="900" fill="url(#sky)"/>
+<circle cx="1120" cy="315" r="125" fill="#f7d98b" opacity=".42" filter="url(#blur)"/>
+<circle cx="1120" cy="315" r="78" fill="url(#sun)"/>
+<path d="M0 520 Q220 390 430 500T850 470T1260 480T1600 420V900H0Z" fill="#b7c9b4" opacity=".8"/>
+<path d="M0 610L220 390 360 530 560 300 760 555 970 370 1190 590 1390 410 1600 570V900H0Z" fill="#91aa96"/>
+<path d="M0 680L250 485 420 635 650 420 860 650 1080 470 1320 680 1510 510 1600 580V900H0Z" fill="url(#mount)"/>
+<path d="M0 760Q240 620 480 735T960 710T1360 690T1600 740V900H0Z" fill="url(#front)"/>
+<path d="M0 815Q300 730 590 800T1120 780T1600 800V900H0Z" fill="#173d34"/>
+<g fill="#163b32"><path d="M180 900V650l-70 90 70-20 70 20-70-90V590l-95 115 95-30 95 30-95-115Z"/><path d="M310 900V700l-58 72 58-16 58 16-58-72V640l-75 90 75-22 75 22-75-90Z"/></g>
+<g transform="translate(490 590)">
+ <path d="M0 250q-18-82 25-125l38-35 50 10 38 62-15 88Z" fill="#1e2e2b"/>
+ <circle cx="88" cy="42" r="32" fill="#28352f"/>
+ <path d="M48 120q-65 40-75 110h205q-35-85-80-110Z" fill="#263c34"/>
+ <path d="M45 238q-42 28-55 72h142q-22-50-58-72Z" fill="#1c302b"/>
+ <path d="M-10 308h250" stroke="#c9ad7a" stroke-width="8" stroke-linecap="round"/>
+ <path d="M105 132l70 42" stroke="#d8b27d" stroke-width="9" stroke-linecap="round"/>
+</g>
+<g opacity=".75" fill="none" stroke="#fff8e9" stroke-width="3"><path d="M920 560q110-35 210 0"/><path d="M980 590q80-24 150 0"/></g>
+<rect x="790" y="635" width="720" height="190" rx="28" fill="#fffaf0" opacity=".82"/>
+<text x="1150" y="710" text-anchor="middle" font-family="Noto Sans Devanagari, sans-serif" font-size="54" font-weight="700" fill="#234638">खुशी की असली कला</text>
+<text x="1150" y="775" text-anchor="middle" font-family="Noto Sans Devanagari, sans-serif" font-size="36" fill="#314d40">सब कुछ पाने में नहीं, जो है उसमें</text>
+<text x="1150" y="820" text-anchor="middle" font-family="Noto Sans Devanagari, sans-serif" font-size="36" fill="#314d40">संतोष खोजना सीखने में है।</text>
+</svg>
