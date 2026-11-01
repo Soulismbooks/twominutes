@@ -186,10 +186,12 @@ def write(path, content):
 
 def card(p):
     label = p["labels"][0] if p["labels"] else "Two Minutes"
+    # A broken or expired Blogger image URL should never leave an empty image box.
+    fallback = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 675'%3E%3Cdefs%3E%3ClinearGradient id='g' x2='0' y2='1'%3E%3Cstop stop-color='%23f9d78a'/%3E%3Cstop offset='1' stop-color='%2385a99a'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='1200' height='675' fill='url(%23g)'/%3E%3Ccircle cx='900' cy='180' r='75' fill='%23fff3c4'/%3E%3Cpath d='M0 500L280 260 520 500 760 300 1200 570V675H0Z' fill='%235c806e'/%3E%3Cpath d='M0 570L350 390 650 590 920 420 1200 610V675H0Z' fill='%233d6658'/%3E%3Ctext x='600' y='625' text-anchor='middle' font-size='34' fill='white' font-family='Arial,sans-serif'%3ETwo Minutes to Happiness%3C/text%3E%3C/svg%3E"
     if p["img"]:
-        thumb = f'<img class="thumb" src="{esc(p["img"])}" alt="{esc(p["title"])}" loading="lazy">'
+        thumb = f'<img class="thumb" src="{esc(p["img"])}" alt="{esc(p["title"])}" loading="lazy" onerror="this.onerror=null;this.src=\'{fallback}\'">'
     else:
-        thumb = f'<span class="thumb-fallback" aria-hidden="true">✦</span>'
+        thumb = f'<img class="thumb" src="{fallback}" alt="{esc(p["title"])}">'
     return f'<a class="card" href="{esc(pretty(p["path"]))}">{thumb}<span class="tag">{esc(label)}</span><h2>{esc(p["title"])}</h2><div class="meta">{p["pub"]}</div><p>{esc(p["desc"])}</p></a>'
 
 def listing(items, base, heading=None, title=None, desc=TAGLINE, homepage=False):
