@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675">
+<defs>
+ <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#172b25"/><stop offset="1" stop-color="#49331f"/></linearGradient>
+ <radialGradient id="glow"><stop stop-color="#ffd879" stop-opacity=".9"/><stop offset="1" stop-color="#f4a62a" stop-opacity="0"/></radialGradient>
+ <linearGradient id="flame" x1="0" y1="1" x2="0" y2="0"><stop stop-color="#ff8b22"/><stop offset="1" stop-color="#fff3b0"/></linearGradient>
+</defs>
+<rect width="1200" height="675" fill="url(#bg)"/>
+<circle cx="600" cy="345" r="290" fill="url(#glow)" opacity=".55"/>
+<g fill="#f6c86d" opacity=".75">
+ <circle cx="115" cy="110" r="3"/><circle cx="245" cy="210" r="2"/><circle cx="1010" cy="120" r="3"/><circle cx="1090" cy="300" r="2"/><circle cx="900" cy="530" r="3"/><circle cx="300" cy="520" r="2"/>
+</g>
+<g transform="translate(600 390)">
+ <ellipse cx="0" cy="92" rx="190" ry="32" fill="#120f0c" opacity=".45"/>
+ <path d="M-170 0 Q-130 105 0 112 Q130 105 170 0 Q100 35 0 34 Q-100 35 -170 0Z" fill="#a94f24" stroke="#e89a49" stroke-width="7"/>
+ <ellipse cx="0" cy="4" rx="170" ry="36" fill="#e99b4b"/>
+ <ellipse cx="0" cy="-2" rx="145" ry="25" fill="#ffd16b"/>
+ <path d="M0 -18 C-64 -90 -24 -139 0 -190 C24 -139 64 -90 0 -18Z" fill="url(#flame)"/>
+ <path d="M0 -24 C-25 -66 -8 -94 0 -115 C12 -86 28 -60 0 -24Z" fill="#fff8d7"/>
+</g>
+<g fill="#f9e8bf" text-anchor="middle" font-family="Noto Sans Devanagari, sans-serif">
+ <text x="600" y="105" font-size="25" letter-spacing="7" fill="#f3c879">DIWALI SPECIAL</text>
+ <text x="600" y="190" font-size="53" font-weight="700">इस दिवाली</text>
+ <text x="600" y="255" font-size="45" font-weight="700">घर ही नहीं, अपनी सोच भी</text>
+ <text x="600" y="315" font-size="55" font-weight="700" fill="#ffd16b">रोशन कीजिए</text>
+ <text x="600" y="590" font-size="23" fill="#e8d7b7">Two Minutes to Happiness &amp; Wealth</text>
+</g>
+</svg>
