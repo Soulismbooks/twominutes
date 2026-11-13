@@ -75,7 +75,10 @@ if POSTS_DIR.is_dir():
         elif img and not img.startswith("https://"):
             img = None  # never publish an unexpected image reference
         labels_in = j.get("labels") or ([j.get("category")] if j.get("category") else []) + list(j.get("tags") or [])
-        posts.append(dict(type="POST", path=f"/{pub_date[:4]}/{pub_date[5:7]}/{s}.html", title=clean_title(j.get("title")),
+        url_date = str(j.get("url_date", pub_date))
+        if not re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}", url_date):
+            raise RuntimeError(f"posts/{f.name} has an invalid url_date")
+        posts.append(dict(type="POST", path=f"/{url_date[:4]}/{url_date[5:7]}/{s}.html", title=clean_title(j.get("title")),
                           seo_title=clean_title(j.get("seo_title")), pub=pub_date, upd=pub_date, content=tidy(c),
                           desc=(str(j.get("seo_description", "")).strip() or str(j.get("summary", "")).strip() or text_of(c)),
                           img=img, labels=[str(k).strip() for k in labels_in if str(k).strip()]))
