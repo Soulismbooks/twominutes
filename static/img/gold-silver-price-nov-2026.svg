@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+<title id="title">Gold and silver prices in India</title>
+<desc id="desc">Gold bars and coins beside silver bars and coins, with a market chart in the background.</desc>
+<defs>
+ <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#071727"/><stop offset=".55" stop-color="#142c43"/><stop offset="1" stop-color="#06121f"/></linearGradient>
+ <radialGradient id="glowG"><stop stop-color="#d99028" stop-opacity=".45"/><stop offset="1" stop-color="#d99028" stop-opacity="0"/></radialGradient>
+ <radialGradient id="glowS"><stop stop-color="#9fc7df" stop-opacity=".35"/><stop offset="1" stop-color="#9fc7df" stop-opacity="0"/></radialGradient>
+ <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff0a3"/><stop offset=".28" stop-color="#f4c04f"/><stop offset=".62" stop-color="#bf7415"/><stop offset="1" stop-color="#ffe08a"/></linearGradient>
+ <linearGradient id="goldSide" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#e9a82e"/><stop offset="1" stop-color="#74400d"/></linearGradient>
+ <linearGradient id="silver" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffffff"/><stop offset=".3" stop-color="#c8d7e1"/><stop offset=".65" stop-color="#718898"/><stop offset="1" stop-color="#eef4f8"/></linearGradient>
+ <linearGradient id="silverSide" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#b9cbd6"/><stop offset="1" stop-color="#425768"/></linearGradient>
+ <linearGradient id="floor" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#263a4a"/><stop offset="1" stop-color="#08131e"/></linearGradient>
+ <filter id="blur"><feGaussianBlur stdDeviation="12"/></filter>
+ <filter id="shadow" x="-30%" y="-30%" width="160%" height="180%"><feGaussianBlur in="SourceAlpha" stdDeviation="13"/><feOffset dy="13"/><feComponentTransfer><feFuncA type="linear" slope=".42"/></feComponentTransfer><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+</defs>
+<rect width="1200" height="630" fill="url(#bg)"/>
+<ellipse cx="260" cy="310" rx="400" ry="280" fill="url(#glowG)"/>
+<ellipse cx="950" cy="300" rx="370" ry="280" fill="url(#glowS)"/>
+<g opacity=".32" filter="url(#blur)" fill="none" stroke-linecap="round">
+ <path d="M0 270 L95 220 155 270 230 150 300 210 390 125 475 245 555 205 645 290 730 185 820 225 900 130 985 175 1070 90 1200 130" stroke="#e3ad4e" stroke-width="9"/>
+ <path d="M0 350 L105 320 180 355 260 280 350 330 440 260 535 305 625 245 710 330 800 270 890 320 970 240 1060 300 1200 215" stroke="#8ec2dc" stroke-width="8"/>
+</g>
+<g opacity=".42" stroke-linecap="round">
+ <path d="M0 340H1200M0 420H1200M0 500H1200" stroke="#9fb8c8" stroke-opacity=".16" stroke-width="2"/>
+ <path d="M100 100V520M250 100V520M400 100V520M550 100V520M700 100V520M850 100V520M1000 100V520M1150 100V520" stroke="#9fb8c8" stroke-opacity=".1" stroke-width="1"/>
+</g>
+<g opacity=".7">
+ <g fill="#27b58c"><rect x="73" y="195" width="13" height="72" rx="3"/><rect x="213" y="156" width="13" height="91" rx="3"/><rect x="355" y="193" width="13" height="55" rx="3"/><rect x="499" y="165" width="13" height="95" rx="3"/><rect x="645" y="196" width="13" height="72" rx="3"/><rect x="790" y="144" width="13" height="102" rx="3"/><rect x="936" y="168" width="13" height="73" rx="3"/><rect x="1080" y="104" width="13" height="115" rx="3"/></g>
+ <g fill="#d85c50"><rect x="143" y="175" width="13" height="85" rx="3"/><rect x="284" y="205" width="13" height="82" rx="3"/><rect x="427" y="180" width="13" height="88" rx="3"/><rect x="572" y="220" width="13" height="78" rx="3"/><rect x="718" y="171" width="13" height="81" rx="3"/><rect x="862" y="185" width="13" height="98" rx="3"/><rect x="1008" y="135" width="13" height="93" rx="3"/><rect x="1150" y="110" width="13" height="78" rx="3"/></g>
+</g>
+<path d="M0 450 Q260 400 520 450 T1200 420V630H0Z" fill="url(#floor)"/>
+<ellipse cx="310" cy="555" rx="285" ry="47" fill="#d58d2a" opacity=".16" filter="url(#blur)"/>
+<ellipse cx="920" cy="555" rx="270" ry="48" fill="#bdd7e5" opacity=".14" filter="url(#blur)"/>
+<!-- Gold ingots -->
+<g filter="url(#shadow)">
+ <path d="M75 425 L120 355 335 355 385 425 362 470 98 470Z" fill="url(#goldSide)" stroke="#f7d577" stroke-width="3"/>
+ <path d="M120 355 L335 355 385 425 75 425Z" fill="url(#gold)" stroke="#ffe49a" stroke-width="3"/>
+ <path d="M120 355 L165 382 294 382 335 355" fill="none" stroke="#fff2ba" stroke-width="3" opacity=".8"/>
+ <path d="M240 328 L293 238 520 238 575 328 550 378 267 378Z" fill="url(#goldSide)" stroke="#f7d577" stroke-width="3"/>
+ <path d="M293 238 L520 238 575 328 240 328Z" fill="url(#gold)" stroke="#fff0aa" stroke-width="3"/>
+ <path d="M293 238 L350 268 460 268 520 238" fill="none" stroke="#fff6ca" stroke-width="4" opacity=".8"/>
+</g>
+<!-- Gold coins -->
+<g filter="url(#shadow)" stroke="#a96513" stroke-width="5">
+ <ellipse cx="230" cy="495" rx="85" ry="22" fill="#8e5411"/>
+ <path d="M145 478V495C145 509 183 520 230 520S315 509 315 495V478" fill="url(#goldSide)"/>
+ <ellipse cx="230" cy="478" rx="85" ry="22" fill="url(#gold)"/>
+ <ellipse cx="230" cy="478" rx="61" ry="14" fill="none" stroke="#fff1b0" stroke-width="3"/>
+ <ellipse cx="360" cy="520" rx="78" ry="20" fill="#a16617"/>
+ <path d="M282 502V520C282 532 317 541 360 541S438 532 438 520V502" fill="url(#goldSide)"/>
+ <ellipse cx="360" cy="502" rx="78" ry="20" fill="url(#gold)"/>
+ <ellipse cx="360" cy="502" rx="55" ry="12" fill="none" stroke="#fff0a4" stroke-width="3"/>
+</g>
+<!-- Silver ingots -->
+<g filter="url(#shadow)">
+ <path d="M690 410 L740 340 970 340 1020 410 995 458 715 458Z" fill="url(#silverSide)" stroke="#d5e3eb" stroke-width="3"/>
+ <path d="M740 340 L970 340 1020 410 690 410Z" fill="url(#silver)" stroke="#f4fbff" stroke-width="3"/>
+ <path d="M740 340 L790 367 920 367 970 340" fill="none" stroke="#fff" stroke-width="3" opacity=".8"/>
+ <path d="M850 365 L895 270 1110 270 1160 365 1135 410 875 410Z" fill="url(#silverSide)" stroke="#d5e3eb" stroke-width="3"/>
+ <path d="M895 270 L1110 270 1160 365 850 365Z" fill="url(#silver)" stroke="#f7fcff" stroke-width="3"/>
+ <path d="M895 270 L950 300 1065 300 1110 270" fill="none" stroke="#fff" stroke-width="3" opacity=".8"/>
+</g>
+<!-- Silver coins -->
+<g filter="url(#shadow)" stroke="#748c9c" stroke-width="5">
+ <ellipse cx="850" cy="500" rx="78" ry="20" fill="#40586a"/>
+ <path d="M772 483V500C772 512 807 522 850 522S928 512 928 500V483" fill="url(#silverSide)"/>
+ <ellipse cx="850" cy="483" rx="78" ry="20" fill="url(#silver)"/>
+ <ellipse cx="850" cy="483" rx="54" ry="12" fill="none" stroke="#fff" stroke-width="3"/>
+ <ellipse cx="1015" cy="515" rx="84" ry="21" fill="#465f70"/>
+ <path d="M931 496V515C931 528 968 538 1015 538S1099 528 1099 515V496" fill="url(#silverSide)"/>
+ <ellipse cx="1015" cy="496" rx="84" ry="21" fill="url(#silver)"/>
+ <ellipse cx="1015" cy="496" rx="59" ry="13" fill="none" stroke="#fff" stroke-width="3"/>
+</g>
+<g opacity=".18" fill="#fff"><path d="M0 580Q300 540 600 585T1200 570V630H0Z"/></g>
+</svg>
